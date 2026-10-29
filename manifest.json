@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Cineville Ratings",
+  "version": "0.1.0",
+  "description": "在 Cineville 上显示每部电影的豆瓣 / IMDb / NeoDB 评分和短评。",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://neodb.social/*",
+    "https://movie.douban.com/*",
+    "https://www.imdb.com/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://cineville.nl/*", "https://www.cineville.nl/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

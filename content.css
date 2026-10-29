@@ -1,0 +1,7 @@
+.cvr-badge{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0;font:600 12px/1.2 system-ui,sans-serif}
+.cvr-badge a,.cvr-badge span.cvr-chip{display:inline-flex;gap:4px;align-items:center;padding:3px 7px;border-radius:999px;background:#111;color:#fff;text-decoration:none}
+.cvr-badge .cvr-douban{background:#2e963d}.cvr-badge .cvr-imdb{background:#f5c518;color:#000}.cvr-badge .cvr-neodb{background:#5b5bd6}
+.cvr-badge .cvr-muted{background:#888}
+.cvr-comments{margin:12px 0;padding:12px 14px;border-left:3px solid #2e963d;background:rgba(0,0,0,.05);font:14px/1.5 system-ui,sans-serif}
+.cvr-comments h4{margin:0 0 8px;font-size:14px}
+.cvr-comments p{margin:6px 0}.cvr-comments b{margin-right:6px}
