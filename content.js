@@ -2,7 +2,7 @@
   const DEFAULTS = {
     showDouban: true, showImdb: true, showNeodb: true, showTmdb: true, showOnList: true, hideNotFound: false,
     translate: true, lang: "zh-cn",
-    showComments: true, commentDouban: true, commentNeodb: true, commentTmdb: true, commentCount: "8",
+    showComments: true, commentDouban: true, commentNeodb: true, commentTmdb: true, commentCount: "8", autoTranslate: true,
     omdbKey: "", tmdbKey: "",
   };
   let settings = { ...DEFAULTS };
@@ -121,7 +121,32 @@
     return s;
   }
 
-  function commentRow(c) {
+  // ---- 外语短评翻译(Chrome 内置 Translator API,本机运行,不需要 key) ----
+  const targetCode = () => (settings.lang.startsWith("zh") ? (settings.lang === "zh-cn" ? "zh" : "zh-Hant") : settings.lang);
+  const translators = new Map();
+  // 返回译文;"click" 表示需要用户点一下才能下载语言包;null 表示不可用
+  async function translate(text, src, userInitiated) {
+    if (!("Translator" in self)) return null;
+    const target = targetCode();
+    if (src === target.split("-")[0]) return null;
+    const key = `${src}>${target}`;
+    try {
+      let t = translators.get(key);
+      if (!t) {
+        const opts = { sourceLanguage: src, targetLanguage: target };
+        const avail = await Translator.availability(opts);
+        if (avail === "unavailable") return null;
+        if (avail !== "available" && !userInitiated) return "click";
+        t = await Translator.create(opts);
+        translators.set(key, t);
+      }
+      return await t.translate(text);
+    } catch {
+      return null;
+    }
+  }
+
+  function commentRow(c, autoTranslate) {
     const row = h("div", "cvr-cmt");
     const head = h("div", "cvr-head");
     const u = h(c.url ? "a" : "span", null, c.user);
@@ -131,7 +156,30 @@
     if (c.stars) head.append(stars(Math.round(c.stars)));
     head.append(h("span", "cvr-from", { douban: "豆瓣", neodb: "NeoDB", tmdb: "TMDB" }[c.src]));
     if (c.likes) head.append(h("span", "cvr-vote", `${c.likes} ${c.src === "douban" ? "有用" : "赞"}`));
-    row.append(head, h("p", null, c.text.length > 240 ? c.text.slice(0, 240) + "…" : c.text));
+    const original = c.text.length > 240 ? c.text.slice(0, 240) + "…" : c.text;
+    const body = h("p", null, original);
+    row.append(head, body);
+
+    // 外语短评:提供"翻译"链接;豆瓣短评不可用时自动翻译
+    if (c.lang && c.lang !== targetCode().split("-")[0] && "Translator" in self) {
+      const link = h("a", "cvr-tr", "翻译");
+      let translated = null, showing = false;
+      const apply = async (userInitiated) => {
+        if (showing) { body.textContent = original; link.textContent = "翻译"; showing = false; return; }
+        translated ||= await translate(original, c.lang, userInitiated);
+        if (translated && translated !== "click") {
+          body.textContent = translated;
+          link.textContent = "显示原文";
+          showing = true;
+        } else if (translated === "click") {
+          link.textContent = "翻译(首次需下载语言包)";
+          translated = null;
+        }
+      };
+      link.addEventListener("click", () => apply(true));
+      head.append(link);
+      if (autoTranslate) apply(false);
+    }
     return row;
   }
 
@@ -155,7 +203,8 @@
     if (!items.length) return null;
     const sec = h("section", "cvr-sec");
     sec.append(h("h3", null, "短评"));
-    for (const c of items) sec.append(commentRow(c));
+    const doubanMissing = !res.douban?.comments?.length;
+    for (const c of items) sec.append(commentRow(c, settings.autoTranslate && doubanMissing));
     return sec;
   }
 
@@ -240,6 +289,7 @@
     { k: "commentDouban", l: "来自豆瓣" },
     { k: "commentNeodb", l: "来自 NeoDB" },
     { k: "commentTmdb", l: "来自 TMDB(英文为主)" },
+    { k: "autoTranslate", l: "豆瓣短评拿不到时,自动翻译外语短评(Chrome 内置翻译)" },
     { k: "commentCount", l: "最多显示条数", opts: [["3", "3"], ["5", "5"], ["8", "8"], ["12", "12"]] },
     { head: "API Key(免费申请,只保存在本浏览器)" },
     { k: "tmdbKey", l: "TMDB(themoviedb.org):匹配、译名、简介、评论", text: true },

@@ -250,6 +250,7 @@ function tmdbReviews(d) {
       text: r.content.replace(/\r/g, "").replace(/[*_#>`]/g, "").replace(/\s+/g, " ").trim(),
       stars: r.author_details?.rating ? r.author_details.rating / 2 : null,
       likes: 0,
+      lang: "en", // TMDB 评论以英文为主
       src: "tmdb",
     }))
     .filter((c) => c.text.length >= 30)
@@ -341,6 +342,7 @@ async function neodbComments(uuid, lang) {
         stars: stars || null,
         likes: p.favourites_count || 0,
         sameLang: (p.language || "").split("-")[0] === base,
+        lang: (p.language || "").split("-")[0] || null,
         src: "neodb",
       };
     })
@@ -351,11 +353,11 @@ async function neodbComments(uuid, lang) {
 
 chrome.runtime.onMessage.addListener((msg, _s, send) => {
   if (msg?.type === "film") {
-    cached(`v6:${msg.locale}:${msg.slug}`, () => lookup(msg.slug, msg.locale)).then(send, (e) => send({ error: String(e) }));
+    cached(`v7:${msg.locale}:${msg.slug}`, () => lookup(msg.slug, msg.locale)).then(send, (e) => send({ error: String(e) }));
     return true;
   }
   if (msg?.type === "comments") {
-    cached(`c2:${msg.uuid}:${msg.lang}`, () => neodbComments(msg.uuid, msg.lang), 24 * 3600 * 1000).then(
+    cached(`c3:${msg.uuid}:${msg.lang}`, () => neodbComments(msg.uuid, msg.lang), 24 * 3600 * 1000).then(
       send,
       () => send([])
     );
@@ -366,7 +368,7 @@ chrome.runtime.onMessage.addListener((msg, _s, send) => {
 chrome.storage.onChanged.addListener(async (_c, area) => {
   if (area !== "sync" || !(_c.omdbKey || _c.tmdbKey)) return;
   const all = await chrome.storage.local.get(null);
-  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("v6:")));
+  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("v7:")));
 });
 
 chrome.runtime.onMessage.addListener((msg, _s, send) => {

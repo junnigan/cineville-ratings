@@ -23,3 +23,5 @@ a.cvr-chip:hover{filter:brightness(1.1)}
 .cvr-vote{margin-left:auto;opacity:.6;white-space:nowrap}
 .cvr-cmt p{margin:4px 0 0;overflow-wrap:anywhere;word-break:break-word;font-size:14px;line-height:1.6}
 .cvr-extra,.cvr-extra *{text-align:left}
+.cvr-tr{font-size:12px;color:#3377aa;cursor:pointer;margin-left:4px}.cvr-tr:hover{text-decoration:underline}
+.cvr-tr{order:8}.cvr-vote{order:9}
