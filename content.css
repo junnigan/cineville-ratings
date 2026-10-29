@@ -6,6 +6,7 @@
 a.cvr-chip:hover{filter:brightness(1.1)}
 .cvr-chip i{font-style:normal}
 .cvr-douban{background:#2e963d}.cvr-imdb{background:#f5c518;color:#000}.cvr-neodb{background:#5b5bd6}
+.cvr-tmdb{background:#01b4e4;color:#032541}
 .cvr-muted{background:#888;color:#fff}
 
 .cvr-extra{margin-top:24px;min-width:0;max-width:100%}.cvr-cmt,.cvr-sec{min-width:0}

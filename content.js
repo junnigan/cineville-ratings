@@ -1,9 +1,9 @@
 (() => {
   const DEFAULTS = {
-    showDouban: true, showImdb: true, showNeodb: true, showOnList: true, hideNotFound: false,
+    showDouban: true, showImdb: true, showNeodb: true, showTmdb: true, showOnList: true, hideNotFound: false,
     translate: true, lang: "zh-cn",
-    showComments: true, commentDouban: true, commentNeodb: true, commentCount: "8",
-    omdbKey: "",
+    showComments: true, commentDouban: true, commentNeodb: true, commentTmdb: true, commentCount: "8",
+    omdbKey: "", tmdbKey: "",
   };
   let settings = { ...DEFAULTS };
   const views = new Map(); // 页面元素(标题链接 / h1) -> view,轮播切换时复用同一个元素
@@ -53,6 +53,7 @@
     else if (d?.blocked) e.title = "豆瓣拒绝了请求,请先在此浏览器登录豆瓣";
     else if (d?.error === "nokey") e.title = "在设置里填写 OMDb key 才能显示 IMDb 评分";
     else if (d?.error) e.title = d.error;
+    else if (d?.url && !d.rating) e.title = "暂无评分";
     return e;
   }
 
@@ -70,7 +71,8 @@
     }
     if (settings.showDouban) b.append(chip("cvr-douban", "豆瓣", res.douban));
     if (settings.showImdb) b.append(chip("cvr-imdb", "IMDb", res.imdb));
-    if (settings.showNeodb) b.append(chip("cvr-neodb", "NeoDB", res.neodb));
+    if (settings.showNeodb && res.neodb) b.append(chip("cvr-neodb", "NeoDB", res.neodb));
+    if (settings.showTmdb && res.tmdb) b.append(chip("cvr-tmdb", "TMDB", res.tmdb));
     return b.children.length ? b : null;
   }
 
@@ -82,12 +84,12 @@
     const cands = [];
     for (const code of ALIASES[lang] || [lang]) {
       const d = (res.descriptions || []).find((x) => x.lang === code);
-      if (d) cands.push({ lang, text: d.text, src: "NeoDB" });
+      if (d) cands.push({ lang, text: d.text, src: d.src || "NeoDB" });
     }
     if (res.douban?.summary) cands.push({ lang: "zh", text: res.douban.summary, src: "豆瓣" });
     if (res.imdb?.plot) cands.push({ lang: "en", text: res.imdb.plot, src: "IMDb" });
     const en = (res.descriptions || []).find((x) => x.lang === "en");
-    if (en) cands.push({ lang: "en", text: en.text, src: "NeoDB" });
+    if (en) cands.push({ lang: "en", text: en.text, src: en.src || "NeoDB" });
     cands.sort((a, b) => (b.lang.startsWith(want) ? 1 : 0) - (a.lang.startsWith(want) ? 1 : 0));
 
     if (!res.meta.description) return cands[0] || null;
@@ -127,7 +129,7 @@
     head.append(u);
     if (isZh()) head.append("看过");
     if (c.stars) head.append(stars(Math.round(c.stars)));
-    head.append(h("span", "cvr-from", c.src === "douban" ? "豆瓣" : "NeoDB"));
+    head.append(h("span", "cvr-from", { douban: "豆瓣", neodb: "NeoDB", tmdb: "TMDB" }[c.src]));
     if (c.likes) head.append(h("span", "cvr-vote", `${c.likes} ${c.src === "douban" ? "有用" : "赞"}`));
     row.append(head, h("p", null, c.text.length > 240 ? c.text.slice(0, 240) + "…" : c.text));
     return row;
@@ -148,6 +150,7 @@
       const neo = await request({ type: "comments", uuid: res.uuid, lang: settings.lang });
       lists.push(Array.isArray(neo) ? neo : []);
     }
+    if (settings.commentTmdb) lists.push(res.tmdb?.reviews || []);
     const items = interleave(lists, +settings.commentCount || 8);
     if (!items.length) return null;
     const sec = h("section", "cvr-sec");
@@ -226,6 +229,7 @@
     { k: "showDouban", l: "豆瓣" },
     { k: "showImdb", l: "IMDb" },
     { k: "showNeodb", l: "NeoDB" },
+    { k: "showTmdb", l: "TMDB(需要填写 key)" },
     { k: "showOnList", l: "在列表页和横幅上也显示" },
     { k: "hideNotFound", l: "找不到时不显示“未找到”" },
     { head: "翻译" },
@@ -235,9 +239,11 @@
     { k: "showComments", l: "在详情页显示短评" },
     { k: "commentDouban", l: "来自豆瓣" },
     { k: "commentNeodb", l: "来自 NeoDB" },
+    { k: "commentTmdb", l: "来自 TMDB(英文为主)" },
     { k: "commentCount", l: "最多显示条数", opts: [["3", "3"], ["5", "5"], ["8", "8"], ["12", "12"]] },
-    { head: "IMDb" },
-    { k: "omdbKey", l: "OMDb API Key(omdbapi.com 免费申请,仅保存在本浏览器)", text: true },
+    { head: "API Key(免费申请,只保存在本浏览器)" },
+    { k: "tmdbKey", l: "TMDB(themoviedb.org):匹配、译名、简介、评论", text: true },
+    { k: "omdbKey", l: "OMDb(omdbapi.com):IMDb 评分", text: true },
   ];
 
   function buildPanel() {
@@ -253,7 +259,7 @@
       label{display:flex;gap:8px;align-items:flex-start;margin:4px 0}
       .col{display:block}select,input[type=text]{width:100%;margin-top:3px;padding:4px;font:inherit}
       button.clear{margin-top:12px;padding:4px 10px;font:inherit}
-      .msg{color:#2e963d;font-size:12px;min-height:1em;margin-top:6px}
+      .credit{display:block;margin-top:10px;color:#888;font-size:11px;line-height:1.4}.msg{color:#2e963d;font-size:12px;min-height:1em;margin-top:6px}
     </style>
     <button class="fab" title="Cineville Ratings 设置">⚙</button><div class="panel" hidden></div>`;
     const panel = root.querySelector(".panel");
@@ -284,7 +290,8 @@
     }
     const clear = h("button", "clear", "清除缓存");
     clear.addEventListener("click", () => chrome.runtime.sendMessage({ type: "clearCache" }).then(() => flash("缓存已清除,刷新页面生效")));
-    panel.append(clear, msg);
+    const credit = h("small", "credit", "This product uses the TMDB API but is not endorsed or certified by TMDB. 数据来源:TMDB、NeoDB、OMDb、豆瓣。");
+    panel.append(clear, msg, credit);
     root.querySelector(".fab").addEventListener("click", () => (panel.hidden = !panel.hidden));
     document.documentElement.append(host);
     return panel;

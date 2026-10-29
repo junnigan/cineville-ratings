@@ -19,7 +19,7 @@ async function cached(key, fn, ttl = TTL) {
   return v;
 }
 
-const getSettings = () => chrome.storage.sync.get({ omdbKey: "" });
+const getSettings = () => chrome.storage.sync.get({ omdbKey: "", tmdbKey: "" });
 
 // ---- Cineville ----
 
@@ -163,40 +163,153 @@ async function imdbInfo(id, omdbKey) {
 
 // ---- main lookup ----
 
+// ---- TMDB(需要用户自己的 key) ----
+
+async function tmdbFetch(path, params, key) {
+  const url = new URL("https://api.themoviedb.org/3" + path);
+  for (const [k, v] of Object.entries(params || {})) if (v != null) url.searchParams.set(k, v);
+  const init = {};
+  // v4 读取令牌(eyJ 开头)走 Bearer,v3 key 走 api_key 参数
+  if (key.startsWith("eyJ")) init.headers = { Authorization: `Bearer ${key}` };
+  else url.searchParams.set("api_key", key);
+  const r = await fetch(url, init);
+  if (!r.ok) throw new Error("TMDB " + r.status);
+  return r.json();
+}
+
+const tmdbYear = (m) => +(m.release_date || "").slice(0, 4) || null;
+
+function tmdbScore(m, q, year) {
+  const want = norm(q);
+  const names = [m.title, m.original_title].map(norm);
+  let s = 0;
+  if (names.includes(want)) s += 3;
+  else if (names.some((n) => n && want.length > 3 && (n.includes(want) || want.includes(n)))) s += 1;
+  const y = tmdbYear(m);
+  if (year && y) s += Math.abs(y - year) <= 1 ? 2 : -3;
+  return s;
+}
+
+// 备用匹配用:导演或演员至少有一个对得上
+function tmdbVerify(d, meta) {
+  const dirs = new Set((meta.directors || []).map(norm));
+  const cast = new Set((meta.cast || []).map(norm));
+  const crew = d.credits?.crew || [];
+  const actors = d.credits?.cast || [];
+  return (
+    crew.some((c) => c.job === "Director" && dirs.has(norm(c.name))) ||
+    actors.some((c) => cast.has(norm(c.name)))
+  );
+}
+
+const DETAIL = "translations,external_ids,reviews,credits";
+
+async function tmdbLookup(meta, key) {
+  const tried = new Set();
+  for (const q of titleCandidates(meta.title)) {
+    for (const year of [meta.year, null]) {
+      const { results } = await tmdbFetch("/search/movie", { query: q, year, include_adult: "false" }, key);
+      const ranked = (results || [])
+        .slice(0, 5)
+        .map((m) => ({ m, s: tmdbScore(m, q, meta.year) }))
+        .sort((a, b) => b.s - a.s || b.m.vote_count - a.m.vote_count);
+      for (const { m, s } of ranked.slice(0, 3)) {
+        if (tried.has(m.id)) continue;
+        const yearOk = !meta.year || !tmdbYear(m) || Math.abs(tmdbYear(m) - meta.year) <= 1;
+        if (s < 3 && !yearOk) continue;
+        tried.add(m.id);
+        const d = await tmdbFetch(`/movie/${m.id}`, { language: "en-US", append_to_response: DETAIL }, key);
+        // 片名一致直接接受;靠别名搜到的,要导演/演员对得上才接受
+        if (s >= 3 || tmdbVerify(d, meta)) return d;
+      }
+    }
+  }
+  return null;
+}
+
+// TMDB 的语言标记转成 NeoDB 风格:zh-CN -> zh-cn
+const tmdbLang = (t) =>
+  t.iso_639_1 === "zh" ? `zh-${(t.iso_3166_1 || "cn").toLowerCase()}` : t.iso_639_1;
+
+function tmdbTexts(d) {
+  const titles = [], descriptions = [];
+  for (const t of d.translations?.translations || []) {
+    const lang = tmdbLang(t);
+    if (t.data?.title) titles.push({ lang, text: t.data.title });
+    if (t.data?.overview?.length > 40) descriptions.push({ lang, text: t.data.overview.trim(), src: "TMDB" });
+  }
+  if (d.overview) descriptions.push({ lang: "en", text: d.overview.trim(), src: "TMDB" });
+  return { titles, descriptions };
+}
+
+function tmdbReviews(d) {
+  return (d.reviews?.results || [])
+    .map((r) => ({
+      user: r.author_details?.name || r.author,
+      url: r.url,
+      text: r.content.replace(/\r/g, "").replace(/[*_#>`]/g, "").replace(/\s+/g, " ").trim(),
+      stars: r.author_details?.rating ? r.author_details.rating / 2 : null,
+      likes: 0,
+      src: "tmdb",
+    }))
+    .filter((c) => c.text.length >= 30)
+    .slice(0, 10);
+}
+
+// ---- main lookup ----
+
 async function lookup(slug, locale) {
   const meta = await cinevilleMeta(slug, locale);
-  const item = await neodbLookup(meta);
-  if (!item) return { found: false, meta };
+  const { omdbKey, tmdbKey } = await getSettings();
 
-  const ext = (item.external_resources || []).map((e) => e.url);
+  const tmdb = tmdbKey ? await tmdbLookup(meta, tmdbKey).catch((e) => ({ error: String(e) })) : null;
+  const tm = tmdb && !tmdb.error ? tmdb : null;
+
+  // 有 TMDB 结果时,用它的英文原名和年份去查 NeoDB,比 Cineville 的本地片名准
+  let item = null;
+  if (tm) item = await neodbLookup({ ...meta, title: tm.original_title || tm.title, year: tmdbYear(tm) || meta.year });
+  if (!item) item = await neodbLookup(meta);
+  if (!item && !tm) return { found: false, meta, tmdbError: tmdb?.error || null };
+
+  const ext = (item?.external_resources || []).map((e) => e.url);
   const doubanId = ext.map((u) => u.match(/movie\.douban\.com\/subject\/(\d+)/)?.[1]).find(Boolean);
-  const imdbId = ext.map((u) => u.match(/imdb\.com\/title\/(tt\d+)/)?.[1]).find(Boolean);
-  const { omdbKey } = await getSettings();
+  const imdbId = tm?.external_ids?.imdb_id || ext.map((u) => u.match(/imdb\.com\/title\/(tt\d+)/)?.[1]).find(Boolean);
 
   const [douban, imdb] = await Promise.all([
     doubanId ? doubanInfo(doubanId).catch(() => ({ blocked: true })) : null,
     imdbId ? imdbInfo(imdbId, omdbKey).catch((e) => ({ error: String(e) })) : null,
   ]);
 
+  // TMDB 的译名放前面:同一语言有多个译名时优先取它
+  const t = tm ? tmdbTexts(tm) : { titles: [], descriptions: [] };
   const seen = new Set();
   const titles = [];
-  for (const l of item.localized_title || []) {
+  for (const l of [...t.titles, ...(item?.localized_title || [])]) {
     const k = l.lang + "|" + l.text;
     if (!seen.has(k)) (seen.add(k), titles.push({ lang: l.lang, text: l.text }));
   }
-  const descriptions = (item.localized_description || [])
-    .filter((l) => l.text.length > 80)
-    .slice(0, 12)
-    .map((l) => ({ lang: l.lang, text: l.text.trim() }));
+  const descriptions = [
+    ...t.descriptions,
+    ...(item?.localized_description || [])
+      .filter((l) => l.text.length > 80)
+      .map((l) => ({ lang: l.lang, text: l.text.trim(), src: "NeoDB" })),
+  ].slice(0, 24);
 
   return {
     found: true,
     partial: !!(douban?.blocked || (imdbId && !imdb?.rating)),
     meta,
-    uuid: item.uuid,
-    titles: titles.slice(0, 60),
+    uuid: item?.uuid || null,
+    titles: titles.slice(0, 80),
     descriptions,
-    neodb: { rating: item.rating || null, count: item.rating_count, url: "https://neodb.social" + item.url },
+    tmdb: tm
+      ? { rating: tm.vote_count ? tm.vote_average : null, count: tm.vote_count, url: `https://www.themoviedb.org/movie/${tm.id}`, reviews: tmdbReviews(tm) }
+      : tmdb?.error
+        ? { error: tmdb.error }
+        : null,
+    neodb: item
+      ? { rating: item.rating || null, count: item.rating_count, url: "https://neodb.social" + item.url }
+      : null,
     douban: {
       ...(douban || {}),
       url: doubanId ? `https://movie.douban.com/subject/${doubanId}/` : null,
@@ -208,6 +321,7 @@ async function lookup(slug, locale) {
 // ---- NeoDB short reviews ----
 
 async function neodbComments(uuid, lang) {
+  if (!uuid) return [];
   const r = await fetch(`https://neodb.social/api/item/${uuid}/posts/`);
   if (!r.ok) return [];
   const { data } = await r.json();
@@ -237,7 +351,7 @@ async function neodbComments(uuid, lang) {
 
 chrome.runtime.onMessage.addListener((msg, _s, send) => {
   if (msg?.type === "film") {
-    cached(`v5:${msg.locale}:${msg.slug}`, () => lookup(msg.slug, msg.locale)).then(send, (e) => send({ error: String(e) }));
+    cached(`v6:${msg.locale}:${msg.slug}`, () => lookup(msg.slug, msg.locale)).then(send, (e) => send({ error: String(e) }));
     return true;
   }
   if (msg?.type === "comments") {
@@ -250,9 +364,9 @@ chrome.runtime.onMessage.addListener((msg, _s, send) => {
 });
 
 chrome.storage.onChanged.addListener(async (_c, area) => {
-  if (area !== "sync" || !_c.omdbKey) return;
+  if (area !== "sync" || !(_c.omdbKey || _c.tmdbKey)) return;
   const all = await chrome.storage.local.get(null);
-  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("v5:")));
+  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("v6:")));
 });
 
 chrome.runtime.onMessage.addListener((msg, _s, send) => {

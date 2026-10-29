@@ -11,7 +11,8 @@
     "https://neodb.social/*",
     "https://movie.douban.com/*",
     "https://www.imdb.com/*",
-    "https://www.omdbapi.com/*"
+    "https://www.omdbapi.com/*",
+    "https://api.themoviedb.org/*"
   ],
   "background": {
     "service_worker": "background.js"
