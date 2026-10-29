@@ -5,3 +5,8 @@
 .cvr-comments{margin:12px 0;padding:12px 14px;border-left:3px solid #2e963d;background:rgba(0,0,0,.05);font:14px/1.5 system-ui,sans-serif}
 .cvr-comments h4{margin:0 0 8px;font-size:14px}
 .cvr-comments p{margin:6px 0}.cvr-comments b{margin-right:6px}
+.cvr-title{width:100%;font:600 14px/1.3 system-ui,sans-serif;opacity:.85}
+.cvr-block{margin:12px 0;padding:12px 14px;border-left:3px solid #5b5bd6;background:rgba(0,0,0,.05);font:14px/1.6 system-ui,sans-serif}
+.cvr-block h4{margin:0 0 8px;font-size:14px}
+.cvr-block p{margin:6px 0}.cvr-block a{color:inherit;opacity:.6;font-size:12px;margin-left:6px}
+.cvr-block small{opacity:.6}
