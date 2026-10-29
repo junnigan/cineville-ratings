@@ -292,8 +292,8 @@
     { k: "autoTranslate", l: "豆瓣短评拿不到时,自动翻译外语短评(Chrome 内置翻译)" },
     { k: "commentCount", l: "最多显示条数", opts: [["3", "3"], ["5", "5"], ["8", "8"], ["12", "12"]] },
     { head: "API Key(免费申请,只保存在本浏览器)" },
-    { k: "tmdbKey", l: "TMDB(themoviedb.org):匹配、译名、简介、评论", text: true },
-    { k: "omdbKey", l: "OMDb(omdbapi.com):IMDb 评分", text: true },
+    { k: "tmdbKey", l: "TMDB(themoviedb.org):匹配、译名、简介、评论", text: true, link: "https://www.themoviedb.org/settings/api" },
+    { k: "omdbKey", l: "OMDb(omdbapi.com):IMDb 评分", text: true, link: "https://www.omdbapi.com/apikey.aspx" },
   ];
 
   function buildPanel() {
@@ -308,6 +308,7 @@
       h4{margin:14px 0 4px;font-size:12px;color:#777;font-weight:600}h4:first-child{margin-top:0}
       label{display:flex;gap:8px;align-items:flex-start;margin:4px 0}
       .col{display:block}select,input[type=text]{width:100%;margin-top:3px;padding:4px;font:inherit}
+      a.getkey{display:inline-block;margin-top:4px;padding:3px 10px;border:1px solid #101a3d;border-radius:999px;color:#101a3d;font-size:12px;text-decoration:none;align-self:flex-start}a.getkey:hover{background:#101a3d;color:#fff}
       button.clear{margin-top:12px;padding:4px 10px;font:inherit}
       .credit{display:block;margin-top:10px;color:#888;font-size:11px;line-height:1.4}.msg{color:#2e963d;font-size:12px;min-height:1em;margin-top:6px}
     </style>
@@ -327,6 +328,11 @@
       } else if (f.text) {
         input = Object.assign(h("input"), { type: "text", value: settings[f.k] });
         lab.append(h("span", null, f.l), input);
+        if (f.link) {
+          const a = h("a", "getkey", "免费申请 Key ↗");
+          Object.assign(a, { href: f.link, target: "_blank", rel: "noopener" });
+          lab.append(a);
+        }
       } else {
         input = Object.assign(h("input"), { type: "checkbox", checked: !!settings[f.k] });
         lab.append(input, h("span", null, f.l));
