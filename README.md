@@ -44,6 +44,10 @@ When you open a film page, its title, year, directors and cast are sent to TMDB,
 
 This project is free and open source. TMDB's API terms do not allow commercial use without a separate agreement, so please do not add paid tiers, ads or affiliate links, and do not share a single API key between users.
 
+## Privacy policy
+
+See [PRIVACY.md](PRIVACY.md).
+
 ## Attribution
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.

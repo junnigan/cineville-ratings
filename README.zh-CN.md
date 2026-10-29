@@ -44,6 +44,10 @@ IMDb 会拦截直接抓取,所以 IMDb 评分需要 OMDb key。OMDb 不提供评
 
 本项目免费开源。TMDB 的 API 条款不允许未经单独协议的商业使用,所以请不要加入付费版、广告或联盟链接,也不要让多个用户共用同一个 API key。
 
+## 隐私政策
+
+见 [PRIVACY.md](PRIVACY.md)。
+
 ## 声明
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
