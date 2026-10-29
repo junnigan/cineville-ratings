@@ -33,6 +33,7 @@ async function cinevilleMeta(slug, locale) {
     title: f.title,
     year: f.releaseYear,
     directors: f.directors || [],
+    cast: (f.cast || []).map((c) => c.replace(/&#0?39;|&#x27;/g, "'")),
     description: (f.description || "").trim(), // 页面只显示 description,不含 shortDescription
   };
 }
@@ -62,6 +63,33 @@ function score(item, title, year) {
   return s;
 }
 
+// 片名对不上时(Cineville 用本地片名,NeoDB 用英文名),改用导演 + 演员 + 年份匹配
+function personScore(item, meta) {
+  const dirs = (meta.directors || []).map(norm);
+  const names = (item.credits || []).map((c) => ({ role: c.role, n: norm(c.name) }));
+  let s = 0;
+  if (names.some((c) => c.role === "director" && dirs.includes(c.n))) s += 2;
+  const cast = new Set((meta.cast || []).map(norm));
+  s += Math.min(2, names.filter((c) => c.role !== "director" && cast.has(c.n)).length) * 2;
+  const years = (item.tags || []).filter((t) => /^(19|20)\d\d$/.test(t)).map(Number);
+  if (meta.year && years.length) s += years.some((y) => Math.abs(y - meta.year) <= 1) ? 2 : -3;
+  return s;
+}
+
+async function neodbByPeople(meta) {
+  for (const d of (meta.directors || []).slice(0, 2)) {
+    const r = await fetch(`https://neodb.social/api/catalog/search?category=movie&query=${encodeURIComponent(d)}`);
+    if (!r.ok) continue;
+    const { data } = await r.json();
+    const ranked = (data || [])
+      .map((it) => ({ it, s: personScore(it, meta) }))
+      .filter((x) => x.s >= 4)
+      .sort((a, b) => b.s - a.s || (b.it.rating_count || 0) - (a.it.rating_count || 0));
+    if (ranked.length) return ranked[0].it;
+  }
+  return null;
+}
+
 async function neodbLookup(meta) {
   for (const q of titleCandidates(meta.title)) {
     const r = await fetch(
@@ -75,7 +103,7 @@ async function neodbLookup(meta) {
       .sort((a, b) => b.s - a.s || (b.it.rating_count || 0) - (a.it.rating_count || 0));
     if (ranked.length) return ranked[0].it;
   }
-  return null;
+  return neodbByPeople(meta);
 }
 
 // ---- external ratings ----
@@ -225,4 +253,15 @@ chrome.storage.onChanged.addListener(async (_c, area) => {
   if (area !== "sync" || !_c.omdbKey) return;
   const all = await chrome.storage.local.get(null);
   await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("v5:")));
+});
+
+chrome.runtime.onMessage.addListener((msg, _s, send) => {
+  if (msg?.type !== "clearCache") return;
+  chrome.storage.local.clear().then(() => send(true));
+  return true;
+});
+
+// 点工具栏图标:在当前 Cineville 页面打开设置面板
+chrome.action.onClicked.addListener((tab) => {
+  chrome.tabs.sendMessage(tab.id, { type: "togglePanel" }).catch(() => {});
 });

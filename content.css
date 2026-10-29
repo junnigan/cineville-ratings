@@ -21,3 +21,4 @@ a.cvr-chip:hover{filter:brightness(1.1)}
 .cvr-from{font-size:11px;opacity:.5}
 .cvr-vote{margin-left:auto;opacity:.6;white-space:nowrap}
 .cvr-cmt p{margin:4px 0 0;overflow-wrap:anywhere;word-break:break-word;font-size:14px;line-height:1.6}
+.cvr-extra,.cvr-extra *{text-align:left}

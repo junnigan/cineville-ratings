@@ -2,15 +2,25 @@
   const DEFAULTS = {
     showDouban: true, showImdb: true, showNeodb: true, showOnList: true, hideNotFound: false,
     translate: true, lang: "zh-cn",
-    showComments: true, commentDouban: true, commentNeodb: true, commentCount: "5",
+    showComments: true, commentDouban: true, commentNeodb: true, commentCount: "8",
+    omdbKey: "",
   };
   let settings = { ...DEFAULTS };
-  const done = new WeakSet();
-  const views = []; // { holder, extra, slug, res, title, detail } 设置变更后重绘用
+  const views = new Map(); // 页面元素(标题链接 / h1) -> view,轮播切换时复用同一个元素
 
   const ALIASES = { "zh-cn": ["zh-cn", "zh-hans", "zh"], "zh-tw": ["zh-tw", "zh-hant", "zh-hk", "zh"] };
   const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const isZh = () => settings.lang.startsWith("zh");
+  // 按页面当前语言版本取数据(英文版和荷兰语版的简介可能不同)
+  const locale = /^\/([a-z]{2}-[A-Z]{2})\//.exec(location.pathname)?.[1] || "nl-NL";
+  const slugOf = (href) => new URL(href, location.href).pathname.match(/\/films\/([^/?#]+)/)?.[1];
+
+  const h = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
 
   // ---- 请求队列(列表页卡片多,限制并发) ----
   let active = 0;
@@ -34,13 +44,6 @@
     return null;
   };
 
-  const h = (tag, cls, text) => {
-    const e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text != null) e.textContent = text;
-    return e;
-  };
-
   // ---- 评分标签 ----
   function chip(cls, label, d) {
     const e = h(d?.url ? "a" : "span", `cvr-chip ${cls}`);
@@ -48,7 +51,7 @@
     e.append(h("i", null, label), h("b", null, d?.rating ? d.rating.toFixed(1) : "–"));
     if (d?.count) e.title = `${d.count.toLocaleString()} ratings`;
     else if (d?.blocked) e.title = "豆瓣拒绝了请求,请先在此浏览器登录豆瓣";
-    else if (d?.error === "nokey") e.title = "在插件设置里填写 OMDb key 才能显示 IMDb 评分";
+    else if (d?.error === "nokey") e.title = "在设置里填写 OMDb key 才能显示 IMDb 评分";
     else if (d?.error) e.title = d.error;
     return e;
   }
@@ -71,11 +74,12 @@
     return b.children.length ? b : null;
   }
 
-  // ---- 简介(Cineville 没有时,从豆瓣 / IMDb / NeoDB 取) ----
+  // ---- 简介 ----
+  // 返回要显示的简介,或 null。Cineville 没有简介时补一个;开了翻译时用目标语言简介替换原简介。
   function synopsis(res) {
-    if (res.meta.description) return null;
-    const cands = [];
     const lang = settings.lang;
+    const want = isZh() ? "zh" : lang;
+    const cands = [];
     for (const code of ALIASES[lang] || [lang]) {
       const d = (res.descriptions || []).find((x) => x.lang === code);
       if (d) cands.push({ lang, text: d.text, src: "NeoDB" });
@@ -84,10 +88,12 @@
     if (res.imdb?.plot) cands.push({ lang: "en", text: res.imdb.plot, src: "IMDb" });
     const en = (res.descriptions || []).find((x) => x.lang === "en");
     if (en) cands.push({ lang: "en", text: en.text, src: "NeoDB" });
-    // 目标语言优先:中文优先豆瓣
-    const want = isZh() ? "zh" : lang;
     cands.sort((a, b) => (b.lang.startsWith(want) ? 1 : 0) - (a.lang.startsWith(want) ? 1 : 0));
-    return cands[0] || null;
+
+    if (!res.meta.description) return cands[0] || null;
+    // 已有简介:只有开了翻译、页面语言不同、且有目标语言的简介时才替换
+    if (!settings.translate || want === locale.split("-")[0]) return null;
+    return cands.find((c) => c.lang.startsWith(want)) || null;
   }
 
   function synopsisBlock(s) {
@@ -97,6 +103,12 @@
     for (const para of s.text.split(/\n+/).filter(Boolean)) sec.append(h("p", cls, para));
     sec.append(h("span", "cvr-src", `来源:${s.src}`));
     return sec;
+  }
+
+  // 隐藏 / 恢复 Cineville 自己的简介
+  function setOriginalHidden(main, hide) {
+    const orig = [...main.children].find((el) => el.tagName === "DIV" && !el.classList.contains("cvr-extra") && el.querySelector(":scope > p"));
+    if (orig) orig.style.display = hide ? "none" : "";
   }
 
   // ---- 短评(豆瓣样式) ----
@@ -121,14 +133,22 @@
     return row;
   }
 
+  // 多个来源轮流取,避免全被一个来源占满
+  function interleave(lists, n) {
+    const out = [];
+    for (let i = 0; out.length < n && lists.some((l) => i < l.length); i++)
+      for (const l of lists) if (i < l.length && out.length < n) out.push(l[i]);
+    return out;
+  }
+
   async function commentsBlock(res) {
-    let items = [];
-    if (settings.commentDouban) items.push(...(res.douban?.comments || []));
+    const lists = [];
+    if (settings.commentDouban) lists.push(res.douban?.comments || []);
     if (settings.commentNeodb) {
       const neo = await request({ type: "comments", uuid: res.uuid, lang: settings.lang });
-      if (Array.isArray(neo)) items.push(...neo);
+      lists.push(Array.isArray(neo) ? neo : []);
     }
-    items = items.slice(0, +settings.commentCount || 5);
+    const items = interleave(lists, +settings.commentCount || 8);
     if (!items.length) return null;
     const sec = h("section", "cvr-sec");
     sec.append(h("h3", null, "短评"));
@@ -142,57 +162,149 @@
     const b = listHidden ? null : badge(v);
     // 深色横幅等位置:文字颜色跟随旁边的标题,避免看不清
     if (v.ref?.isConnected) v.holder.style.color = getComputedStyle(v.ref).color;
-    b ? v.holder.replaceChildren(b) : v.holder.replaceChildren();
-    if (!v.detail || !v.res?.found) return;
+    v.holder.replaceChildren(...(b ? [b] : []));
+    if (!v.detail) return;
 
+    const main = v.extra.parentElement;
+    if (!v.res?.found) { v.extra.replaceChildren(); main && setOriginalHidden(main, false); return; }
     const token = (v.token = {});
     const syn = synopsis(v.res);
     const cm = settings.showComments ? await commentsBlock(v.res) : null;
     if (v.token !== token) return;
     v.extra.replaceChildren(...[syn && synopsisBlock(syn), cm].filter(Boolean));
+    if (main) setOriginalHidden(main, !!syn && !!v.res.meta.description);
+  }
+
+  function load(v) {
+    const slug = v.slug;
+    v.res = null;
+    request({ type: "film", slug, locale }).then((res) => {
+      if (v.slug !== slug) return; // 轮播已经切到别的电影
+      v.res = res;
+      render(v);
+    });
   }
 
   // ---- 扫描页面 ----
-  // 按页面当前语言版本取简介(英文版和荷兰语版的简介可能不同)
-  const locale = /^\/([a-z]{2}-[A-Z]{2})\//.exec(location.pathname)?.[1] || "nl-NL";
-  const slugOf = (href) => new URL(href, location.href).pathname.match(/\/films\/([^/?#]+)/)?.[1];
-
-  function track(v) {
-    views.push(v);
-    request({ type: "film", slug: v.slug, locale }).then((res) => { v.res = res; render(v); });
-  }
-
   function scan() {
     if (settings.showOnList) {
       for (const a of document.querySelectorAll('h3 a[href*="/films/"]')) {
-        if (done.has(a)) continue;
-        done.add(a);
         const slug = slugOf(a.href);
         if (!slug) continue;
-        const holder = h("div");
-        a.closest("h3").after(holder);
-        track({ holder, ref: a, slug, title: a.textContent.trim(), detail: false });
+        let v = views.get(a);
+        if (v && v.slug === slug && v.holder.isConnected) { v.title = a.textContent.trim(); continue; }
+        if (!v) { v = { ref: a, detail: false }; views.set(a, v); }
+        // 横幅轮播会复用同一个链接元素,换电影时重新取数据
+        v.holder?.remove();
+        v.holder = h("div");
+        a.closest("h3").after(v.holder);
+        Object.assign(v, { slug, title: a.textContent.trim() });
+        load(v);
       }
     }
     const slug = /\/films\/[^/]+\/?$/.test(location.pathname) && slugOf(location.href);
     const h1 = slug && document.querySelector("h1");
-    if (h1 && !done.has(h1)) {
-      done.add(h1);
-      const holder = h("div");
-      h1.after(holder);
+    if (h1) {
+      let v = views.get(h1);
+      if (v && v.slug === slug && v.holder.isConnected && v.extra.isConnected) return;
+      if (!v) { v = { ref: h1, detail: true }; views.set(h1, v); }
+      v.holder?.remove();
+      v.extra?.remove();
+      v.holder = h("div");
+      h1.after(v.holder);
       // 简介和短评放在正文末尾,即 Cineville 自己的简介下方
-      const extra = h("div", "cvr-extra");
-      (h1.closest("main") || h1.parentElement).append(extra);
-      track({ holder, extra, ref: h1, slug, title: h1.textContent.trim(), detail: true });
+      v.extra = h("div", "cvr-extra");
+      (h1.closest("main") || h1.parentElement).append(v.extra);
+      Object.assign(v, { slug, title: h1.textContent.trim() });
+      load(v);
     }
   }
 
-  const load = () => chrome.storage.sync.get(DEFAULTS).then((s) => (settings = { ...DEFAULTS, ...s }));
-  load().then(scan);
+  // ---- 页面内设置面板 ----
+  const SCHEMA = [
+    { head: "评分来源" },
+    { k: "showDouban", l: "豆瓣" },
+    { k: "showImdb", l: "IMDb" },
+    { k: "showNeodb", l: "NeoDB" },
+    { k: "showOnList", l: "在列表页和横幅上也显示" },
+    { k: "hideNotFound", l: "找不到时不显示“未找到”" },
+    { head: "翻译" },
+    { k: "translate", l: "显示官方译名,并用目标语言简介替换原简介" },
+    { k: "lang", l: "目标语言", opts: [["zh-cn", "简体中文"], ["zh-tw", "繁體中文"], ["en", "English"], ["ja", "日本語"], ["ko", "한국어"], ["fr", "Français"], ["de", "Deutsch"], ["es", "Español"], ["nl", "Nederlands"]] },
+    { head: "短评" },
+    { k: "showComments", l: "在详情页显示短评" },
+    { k: "commentDouban", l: "来自豆瓣" },
+    { k: "commentNeodb", l: "来自 NeoDB" },
+    { k: "commentCount", l: "最多显示条数", opts: [["3", "3"], ["5", "5"], ["8", "8"], ["12", "12"]] },
+    { head: "IMDb" },
+    { k: "omdbKey", l: "OMDb API Key(omdbapi.com 免费申请,仅保存在本浏览器)", text: true },
+  ];
+
+  function buildPanel() {
+    const host = h("div");
+    host.id = "cvr-settings";
+    const root = host.attachShadow({ mode: "open" });
+    root.innerHTML = `<style>
+      *{box-sizing:border-box}
+      .fab{position:fixed;right:16px;bottom:16px;width:40px;height:40px;border:0;border-radius:50%;background:#101a3d;color:#fff;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);z-index:2147483000}
+      .panel{position:fixed;right:16px;bottom:64px;width:320px;max-height:70vh;overflow:auto;padding:14px 16px;background:#fff;color:#1a1a1a;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.28);font:14px/1.5 var(--fonts-averta,system-ui,sans-serif);z-index:2147483000;text-align:left}
+      .panel[hidden]{display:none}
+      h4{margin:14px 0 4px;font-size:12px;color:#777;font-weight:600}h4:first-child{margin-top:0}
+      label{display:flex;gap:8px;align-items:flex-start;margin:4px 0}
+      .col{display:block}select,input[type=text]{width:100%;margin-top:3px;padding:4px;font:inherit}
+      button.clear{margin-top:12px;padding:4px 10px;font:inherit}
+      .msg{color:#2e963d;font-size:12px;min-height:1em;margin-top:6px}
+    </style>
+    <button class="fab" title="Cineville Ratings 设置">⚙</button><div class="panel" hidden></div>`;
+    const panel = root.querySelector(".panel");
+    const msg = h("div", "msg");
+    const flash = (t) => { msg.textContent = t; setTimeout(() => (msg.textContent = ""), 1500); };
+    for (const f of SCHEMA) {
+      if (f.head) { panel.append(h("h4", null, f.head)); continue; }
+      const lab = h("label", f.opts || f.text ? "col" : "");
+      let input;
+      if (f.opts) {
+        input = h("select");
+        for (const [v, t] of f.opts) input.append(Object.assign(h("option", null, t), { value: v }));
+        input.value = settings[f.k];
+        lab.append(h("span", null, f.l), input);
+      } else if (f.text) {
+        input = Object.assign(h("input"), { type: "text", value: settings[f.k] });
+        lab.append(h("span", null, f.l), input);
+      } else {
+        input = Object.assign(h("input"), { type: "checkbox", checked: !!settings[f.k] });
+        lab.append(input, h("span", null, f.l));
+      }
+      input.addEventListener("change", () => {
+        const val = input.type === "checkbox" ? input.checked : input.value.trim();
+        chrome.storage.sync.set({ [f.k]: val });
+        flash("已保存");
+      });
+      panel.append(lab);
+    }
+    const clear = h("button", "clear", "清除缓存");
+    clear.addEventListener("click", () => chrome.runtime.sendMessage({ type: "clearCache" }).then(() => flash("缓存已清除,刷新页面生效")));
+    panel.append(clear, msg);
+    root.querySelector(".fab").addEventListener("click", () => (panel.hidden = !panel.hidden));
+    document.documentElement.append(host);
+    return panel;
+  }
+
+  let panel;
+  const togglePanel = () => {
+    panel ||= buildPanel();
+    panel.hidden = !panel.hidden;
+  };
+  chrome.runtime.onMessage.addListener((m) => m?.type === "togglePanel" && togglePanel());
+
+  const loadSettings = () => chrome.storage.sync.get(DEFAULTS).then((s) => (settings = { ...DEFAULTS, ...s }));
+  loadSettings().then(() => { buildPanelOnce(); scan(); });
+  function buildPanelOnce() { panel ||= buildPanel(); }
+
   chrome.storage.onChanged.addListener((_c, area) => {
     if (area !== "sync") return;
-    load().then(() => {
-      for (const v of views) if (v.res && v.holder.isConnected) render(v);
+    loadSettings().then(() => {
+      for (const v of views.values()) if (v.res && v.holder.isConnected) render(v);
       scan();
     });
   });
