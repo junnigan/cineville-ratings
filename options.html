@@ -2,36 +2,49 @@
 <meta charset="utf-8">
 <title>Cineville Ratings 设置</title>
 <style>
-  body{font:14px/1.6 system-ui,sans-serif;margin:16px;min-width:340px}
-  label{display:block;margin:12px 0 4px;font-weight:600}
-  .row{display:flex;gap:8px;align-items:center}
+  body{font:14px/1.6 system-ui,sans-serif;margin:16px;min-width:360px;color:#222}
+  h3{margin:0 0 8px} h4{margin:18px 0 6px;font-size:13px;color:#666;font-weight:600}
+  .row{display:flex;gap:8px;align-items:center;margin:4px 0}
   .row label{margin:0}
-  small{color:#666;display:block;margin-top:2px}
-  select,input[type=text]{width:100%;padding:4px;box-sizing:border-box}
+  select,input[type=text]{width:100%;padding:4px;box-sizing:border-box;margin-top:4px}
+  small{color:#777;display:block;margin-top:2px}
+  button{margin-top:10px;padding:4px 10px}
   #saved{color:#2e963d;margin-top:12px;height:1em}
 </style>
 <h3>Cineville Ratings</h3>
 
+<h4>评分来源</h4>
+<div class="row"><input type="checkbox" id="showDouban"><label for="showDouban">豆瓣</label></div>
+<div class="row"><input type="checkbox" id="showImdb"><label for="showImdb">IMDb</label></div>
+<div class="row"><input type="checkbox" id="showNeodb"><label for="showNeodb">NeoDB</label></div>
+<div class="row"><input type="checkbox" id="showOnList"><label for="showOnList">在电影列表页也显示(关闭则只在详情页显示)</label></div>
+<div class="row"><input type="checkbox" id="hideNotFound"><label for="hideNotFound">找不到的电影不显示“未找到”</label></div>
+
+<h4>译名</h4>
 <div class="row"><input type="checkbox" id="translate"><label for="translate">显示官方译名</label></div>
-<label for="lang">目标语言</label>
 <select id="lang">
-  <option value="zh-cn">简体中文</option>
-  <option value="zh-tw">繁體中文</option>
-  <option value="en">English</option>
-  <option value="ja">日本語</option>
-  <option value="ko">한국어</option>
-  <option value="fr">Français</option>
-  <option value="de">Deutsch</option>
-  <option value="es">Español</option>
+  <option value="zh-cn">简体中文</option><option value="zh-tw">繁體中文</option>
+  <option value="en">English</option><option value="ja">日本語</option>
+  <option value="ko">한국어</option><option value="fr">Français</option>
+  <option value="de">Deutsch</option><option value="es">Español</option>
   <option value="nl">Nederlands</option>
 </select>
-<small>译名来自 NeoDB 收录的各地区官方片名,例如 Léon → 这个杀手不太冷。没有收录的语言则不显示。</small>
+<small>译名和缺失的简介都按这个语言选。译名来自 NeoDB 收录的各地区片名。</small>
 
-<div class="row" style="margin-top:12px"><input type="checkbox" id="showComments"><label for="showComments">详情页显示短评</label></div>
+<h4>短评(详情页)</h4>
+<div class="row"><input type="checkbox" id="showComments"><label for="showComments">显示短评</label></div>
+<div class="row"><input type="checkbox" id="commentDouban"><label for="commentDouban">来自豆瓣</label></div>
+<div class="row"><input type="checkbox" id="commentNeodb"><label for="commentNeodb">来自 NeoDB</label></div>
+<label for="commentCount">最多显示条数</label>
+<select id="commentCount"><option>3</option><option>5</option><option>8</option><option>10</option></select>
 
-<label for="omdbKey">OMDb API Key(可选)</label>
-<input type="text" id="omdbKey" placeholder="用于获取 IMDb 评分">
-<small>IMDb 会拦截直接抓取。到 omdbapi.com 免费申请 key 后填在这里。</small>
+<h4>IMDb</h4>
+<label for="omdbKey">OMDb API Key</label>
+<input type="text" id="omdbKey" placeholder="用于获取 IMDb 评分和简介">
+<small>IMDb 会拦截直接抓取,需要免费的 OMDb key(omdbapi.com)。key 只保存在本浏览器。</small>
+
+<h4>缓存</h4>
+<button id="clear">清除缓存</button> <small style="display:inline">评分缓存 7 天</small>
 
 <div id="saved"></div>
 <script src="options.js"></script>

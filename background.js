@@ -11,7 +11,9 @@ const norm = (s) =>
 
 async function cached(key, fn, ttl = TTL) {
   const hit = (await chrome.storage.local.get(key))[key];
-  if (hit && Date.now() - hit.t < ttl) return hit.v;
+  // 部分失败的结果(豆瓣被拦、IMDb 没拿到)只缓存 10 分钟,方便登录/填 key 后重试
+  const life = hit?.v?.partial ? 10 * 60 * 1000 : ttl;
+  if (hit && Date.now() - hit.t < life) return hit.v;
   const v = await fn();
   await chrome.storage.local.set({ [key]: { t: Date.now(), v } });
   return v;
@@ -85,26 +87,50 @@ async function doubanInfo(id) {
   const rating = html.match(/<strong[^>]*class="ll rating_num"[^>]*>([\d.]+)<\/strong>/)?.[1];
   if (!rating) return { blocked: true };
   const count = html.match(/<span property="v:votes">(\d+)<\/span>/)?.[1];
+  const strip = (h) => h.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+  const summary = strip(
+    html.match(/<span class="all hidden">([\s\S]*?)<\/span>/)?.[1] ||
+      html.match(/<span property="v:summary"[^>]*>([\s\S]*?)<\/span>/)?.[1] ||
+      ""
+  );
   const comments = [];
-  const re = /<div class="comment">[\s\S]*?<span class="comment-info">\s*<a[^>]*>([^<]+)<\/a>[\s\S]*?<span class="short">([\s\S]*?)<\/span>/g;
-  let m;
-  while ((m = re.exec(html)) && comments.length < 5)
-    comments.push({ user: m[1].trim(), text: m[2].replace(/<[^>]+>/g, "").trim() });
-  return { rating: +rating, count: count ? +count : null, comments };
+  for (const blk of html.split('class="comment-item').slice(1, 11)) {
+    const u = blk.match(/<span class="comment-info">\s*<a[^>]*href="([^"]*)"[^>]*>([^<]+)<\/a>/);
+    const text = blk.match(/<span class="short">([\s\S]*?)<\/span>/)?.[1];
+    if (!u || !text) continue;
+    comments.push({
+      user: u[2].trim(),
+      url: u[1],
+      text: strip(text),
+      stars: +(blk.match(/class="allstar(\d)0 rating"/)?.[1] || 0) || null,
+      likes: +(blk.match(/class="votes vote-count">(\d+)</)?.[1] || 0),
+      src: "douban",
+    });
+  }
+  return { rating: +rating, count: count ? +count : null, summary, comments };
 }
 
 async function imdbInfo(id, omdbKey) {
   if (omdbKey) {
-    const r = await fetch(`https://www.omdbapi.com/?i=${id}&apikey=${encodeURIComponent(omdbKey)}`);
+    const r = await fetch(`https://www.omdbapi.com/?i=${id}&plot=full&apikey=${encodeURIComponent(omdbKey)}`);
     const j = await r.json();
-    if (j.imdbRating && j.imdbRating !== "N/A")
-      return { rating: +j.imdbRating, count: +(j.imdbVotes || "0").replace(/,/g, "") || null };
+    if (j.Response === "False") return { error: "OMDb: " + j.Error };
+    const rating = j.imdbRating && j.imdbRating !== "N/A" ? +j.imdbRating : null;
+    return {
+      rating,
+      count: +(j.imdbVotes || "0").replace(/,/g, "") || null,
+      plot: j.Plot && j.Plot !== "N/A" ? j.Plot : "",
+      error: rating ? null : "OMDb 暂无评分",
+    };
   }
-  const r = await fetch(`https://www.imdb.com/title/${id}/`, { headers: { "Accept-Language": "en" } });
-  if (!r.ok) return null;
-  const ld = (await r.text()).match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1];
-  const ar = ld ? JSON.parse(ld).aggregateRating : null;
-  return ar ? { rating: +ar.ratingValue, count: ar.ratingCount } : null;
+  // 没有 key:IMDb 页面通常会返回验证页,拿不到就提示去填 key
+  try {
+    const r = await fetch(`https://www.imdb.com/title/${id}/`, { headers: { "Accept-Language": "en" } });
+    const ld = r.ok ? (await r.text()).match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1] : null;
+    const ar = ld ? JSON.parse(ld).aggregateRating : null;
+    if (ar) return { rating: +ar.ratingValue, count: ar.ratingCount };
+  } catch {}
+  return { error: "nokey" };
 }
 
 // ---- main lookup ----
@@ -121,7 +147,7 @@ async function lookup(slug) {
 
   const [douban, imdb] = await Promise.all([
     doubanId ? doubanInfo(doubanId).catch(() => ({ blocked: true })) : null,
-    imdbId ? imdbInfo(imdbId, omdbKey).catch(() => null) : null,
+    imdbId ? imdbInfo(imdbId, omdbKey).catch((e) => ({ error: String(e) })) : null,
   ]);
 
   const seen = new Set();
@@ -137,6 +163,7 @@ async function lookup(slug) {
 
   return {
     found: true,
+    partial: !!(douban?.blocked || (imdbId && !imdb?.rating)),
     meta,
     uuid: item.uuid,
     titles: titles.slice(0, 60),
@@ -172,23 +199,30 @@ async function neodbComments(uuid, lang) {
         stars: stars || null,
         likes: p.favourites_count || 0,
         sameLang: (p.language || "").split("-")[0] === base,
+        src: "neodb",
       };
     })
     .filter((c) => c.text.length >= 30)
     .sort((a, b) => b.sameLang - a.sameLang || b.likes - a.likes || b.text.length - a.text.length)
-    .slice(0, 5);
+    .slice(0, 10);
 }
 
 chrome.runtime.onMessage.addListener((msg, _s, send) => {
   if (msg?.type === "film") {
-    cached("v2:" + msg.slug, () => lookup(msg.slug)).then(send, (e) => send({ error: String(e) }));
+    cached("v3:" + msg.slug, () => lookup(msg.slug)).then(send, (e) => send({ error: String(e) }));
     return true;
   }
   if (msg?.type === "comments") {
-    cached(`c1:${msg.uuid}:${msg.lang}`, () => neodbComments(msg.uuid, msg.lang), 24 * 3600 * 1000).then(
+    cached(`c2:${msg.uuid}:${msg.lang}`, () => neodbComments(msg.uuid, msg.lang), 24 * 3600 * 1000).then(
       send,
       () => send([])
     );
     return true;
   }
+});
+
+chrome.storage.onChanged.addListener(async (_c, area) => {
+  if (area !== "sync" || !_c.omdbKey) return;
+  const all = await chrome.storage.local.get(null);
+  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("v3:")));
 });

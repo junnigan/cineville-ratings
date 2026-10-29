@@ -1,23 +1,22 @@
 (() => {
-  const DEFAULTS = { translate: true, lang: "zh-cn", showComments: true };
+  const DEFAULTS = {
+    showDouban: true, showImdb: true, showNeodb: true, showOnList: true, hideNotFound: false,
+    translate: true, lang: "zh-cn",
+    showComments: true, commentDouban: true, commentNeodb: true, commentCount: "5",
+  };
   let settings = { ...DEFAULTS };
   const done = new WeakSet();
-  const views = []; // { holder, slug, res, detail } 用于设置变更后重绘
+  const views = []; // { holder, extra, slug, res, title, detail } 设置变更后重绘用
 
-  const ALIASES = {
-    "zh-cn": ["zh-cn", "zh-hans", "zh"],
-    "zh-tw": ["zh-tw", "zh-hant", "zh-hk", "zh"],
-  };
+  const ALIASES = { "zh-cn": ["zh-cn", "zh-hans", "zh"], "zh-tw": ["zh-tw", "zh-hant", "zh-hk", "zh"] };
   const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const isZh = () => settings.lang.startsWith("zh");
 
   // ---- 请求队列(列表页卡片多,限制并发) ----
   let active = 0;
   const queue = [];
   function request(msg) {
-    return new Promise((resolve) => {
-      queue.push({ msg, resolve });
-      pump();
-    });
+    return new Promise((resolve) => { queue.push({ msg, resolve }); pump(); });
   }
   function pump() {
     while (active < 4 && queue.length) {
@@ -27,149 +26,170 @@
     }
   }
 
-  // ---- 取译名 / 简介 ----
-  function pick(list, lang) {
+  const pick = (list, lang) => {
     for (const code of ALIASES[lang] || [lang]) {
       const hit = (list || []).find((l) => l.lang === code);
       if (hit) return hit.text;
     }
     return null;
-  }
+  };
 
-  // ---- 渲染 ----
+  const h = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
+
+  // ---- 评分标签 ----
   function chip(cls, label, d) {
-    const el = document.createElement(d?.url ? "a" : "span");
-    el.className = `cvr-chip ${cls}`;
-    if (d?.url) Object.assign(el, { href: d.url, target: "_blank", rel: "noopener" });
-    el.textContent = `${label} ${d?.rating ? d.rating.toFixed(1) : "–"}`;
-    if (d?.count) el.title = `${d.count} ratings`;
-    else if (d?.blocked) el.title = "豆瓣拒绝了请求,请先在此浏览器登录豆瓣";
-    return el;
+    const e = h(d?.url ? "a" : "span", `cvr-chip ${cls}`);
+    if (d?.url) Object.assign(e, { href: d.url, target: "_blank", rel: "noopener" });
+    e.append(h("i", null, label), h("b", null, d?.rating ? d.rating.toFixed(1) : "–"));
+    if (d?.count) e.title = `${d.count.toLocaleString()} ratings`;
+    else if (d?.blocked) e.title = "豆瓣拒绝了请求,请先在此浏览器登录豆瓣";
+    else if (d?.error === "nokey") e.title = "在插件设置里填写 OMDb key 才能显示 IMDb 评分";
+    else if (d?.error) e.title = d.error;
+    return e;
   }
 
-  function badge(res, originalTitle) {
-    const b = document.createElement("div");
-    b.className = "cvr-badge";
+  function badge(v) {
+    const { res, title } = v;
+    const b = h("div", "cvr-badge");
     if (!res || res.error || !res.found) {
-      const s = document.createElement("span");
-      s.className = "cvr-chip cvr-muted";
-      s.textContent = res?.error ? "加载失败" : "未找到";
-      b.append(s);
+      if (settings.hideNotFound && !res?.error) return null;
+      b.append(h("span", "cvr-chip cvr-muted", res?.error ? "加载失败" : "未找到"));
       return b;
     }
     if (settings.translate) {
       const t = pick(res.titles, settings.lang);
-      if (t && norm(t) !== norm(originalTitle)) {
-        const d = document.createElement("div");
-        d.className = "cvr-title";
-        d.textContent = t;
-        b.append(d);
-      }
+      if (t && norm(t) !== norm(title)) b.append(h("div", "cvr-title", t));
     }
-    b.append(chip("cvr-douban", "豆瓣", res.douban));
-    b.append(chip("cvr-imdb", "IMDb", res.imdb));
-    b.append(chip("cvr-neodb", "NeoDB", res.neodb));
-    return b;
+    if (settings.showDouban) b.append(chip("cvr-douban", "豆瓣", res.douban));
+    if (settings.showImdb) b.append(chip("cvr-imdb", "IMDb", res.imdb));
+    if (settings.showNeodb) b.append(chip("cvr-neodb", "NeoDB", res.neodb));
+    return b.children.length ? b : null;
   }
 
-  function block(title) {
-    const box = document.createElement("div");
-    box.className = "cvr-block";
-    const h = document.createElement("h4");
-    h.textContent = title;
-    box.append(h);
-    return box;
+  // ---- 简介(Cineville 没有时,从豆瓣 / IMDb / NeoDB 取) ----
+  function synopsis(res) {
+    if (res.meta.description) return null;
+    const cands = [];
+    const lang = settings.lang;
+    for (const code of ALIASES[lang] || [lang]) {
+      const d = (res.descriptions || []).find((x) => x.lang === code);
+      if (d) cands.push({ lang, text: d.text, src: "NeoDB" });
+    }
+    if (res.douban?.summary) cands.push({ lang: "zh", text: res.douban.summary, src: "豆瓣" });
+    if (res.imdb?.plot) cands.push({ lang: "en", text: res.imdb.plot, src: "IMDb" });
+    const en = (res.descriptions || []).find((x) => x.lang === "en");
+    if (en) cands.push({ lang: "en", text: en.text, src: "NeoDB" });
+    // 目标语言优先:中文优先豆瓣
+    const want = isZh() ? "zh" : lang;
+    cands.sort((a, b) => (b.lang.startsWith(want) ? 1 : 0) - (a.lang.startsWith(want) ? 1 : 0));
+    return cands[0] || null;
   }
 
-  function synopsisBlock(res) {
-    if (res.meta.description) return null; // Cineville 自己有简介
-    const text = pick(res.descriptions, settings.lang) || pick(res.descriptions, "en") || res.descriptions?.[0]?.text;
-    if (!text) return null;
-    const box = block("简介");
-    const p = document.createElement("p");
-    p.textContent = text;
-    const s = document.createElement("small");
-    s.textContent = "来源:NeoDB";
-    box.append(p, s);
-    return box;
+  function synopsisBlock(s) {
+    const sec = h("section", "cvr-sec");
+    sec.append(h("h3", null, "简介"));
+    const cls = document.querySelector('p[class*="variant-body"]')?.className;
+    for (const para of s.text.split(/\n+/).filter(Boolean)) sec.append(h("p", cls, para));
+    sec.append(h("span", "cvr-src", `来源:${s.src}`));
+    return sec;
+  }
+
+  // ---- 短评(豆瓣样式) ----
+  function stars(n) {
+    const s = h("span", "cvr-stars");
+    s.append("★".repeat(n));
+    s.append(h("s", null, "☆".repeat(5 - n)));
+    return s;
+  }
+
+  function commentRow(c) {
+    const row = h("div", "cvr-cmt");
+    const head = h("div", "cvr-head");
+    const u = h(c.url ? "a" : "span", null, c.user);
+    if (c.url) Object.assign(u, { href: c.url, target: "_blank", rel: "noopener" });
+    head.append(u);
+    if (isZh()) head.append("看过");
+    if (c.stars) head.append(stars(Math.round(c.stars)));
+    head.append(h("span", "cvr-from", c.src === "douban" ? "豆瓣" : "NeoDB"));
+    if (c.likes) head.append(h("span", "cvr-vote", `${c.likes} ${c.src === "douban" ? "有用" : "赞"}`));
+    row.append(head, h("p", null, c.text.length > 240 ? c.text.slice(0, 240) + "…" : c.text));
+    return row;
   }
 
   async function commentsBlock(res) {
-    const doubanC = res.douban?.comments || [];
-    const neo = await request({ type: "comments", uuid: res.uuid, lang: settings.lang });
-    if (!doubanC.length && !neo?.length) return null;
-    const frag = document.createDocumentFragment();
-    const add = (title, items, src) => {
-      if (!items.length) return;
-      const box = block(title);
-      for (const c of items) {
-        const p = document.createElement("p");
-        const u = document.createElement("b");
-        u.textContent = c.user + (c.stars ? ` ${"★".repeat(Math.round(c.stars))}` : "") + " ";
-        p.append(u, c.text.length > 220 ? c.text.slice(0, 220) + "…" : c.text);
-        if (c.url) {
-          const a = document.createElement("a");
-          Object.assign(a, { href: c.url, target: "_blank", rel: "noopener", textContent: "原文" });
-          p.append(a);
-        }
-        box.append(p);
-      }
-      frag.append(box);
-    };
-    add("豆瓣短评", doubanC, "douban");
-    add("NeoDB 短评", neo || [], "neodb");
-    return frag;
+    let items = [];
+    if (settings.commentDouban) items.push(...(res.douban?.comments || []));
+    if (settings.commentNeodb) {
+      const neo = await request({ type: "comments", uuid: res.uuid, lang: settings.lang });
+      if (Array.isArray(neo)) items.push(...neo);
+    }
+    items = items.slice(0, +settings.commentCount || 5);
+    if (!items.length) return null;
+    const sec = h("section", "cvr-sec");
+    sec.append(h("h3", null, "短评"));
+    for (const c of items) sec.append(commentRow(c));
+    return sec;
   }
 
+  // ---- 渲染 ----
   async function render(v) {
-    const b = badge(v.res, v.title);
-    v.holder.replaceChildren(b);
+    const listHidden = !v.detail && !settings.showOnList;
+    const b = listHidden ? null : badge(v);
+    b ? v.holder.replaceChildren(b) : v.holder.replaceChildren();
     if (!v.detail || !v.res?.found) return;
-    const syn = synopsisBlock(v.res);
-    if (syn) v.holder.append(syn);
-    if (settings.showComments) {
-      const token = (v.token = {});
-      const c = await commentsBlock(v.res);
-      if (c && v.token === token) v.holder.append(c);
-    }
+
+    const token = (v.token = {});
+    const syn = synopsis(v.res);
+    const cm = settings.showComments ? await commentsBlock(v.res) : null;
+    if (v.token !== token) return;
+    v.extra.replaceChildren(...[syn && synopsisBlock(syn), cm].filter(Boolean));
   }
 
   // ---- 扫描页面 ----
   const slugOf = (href) => new URL(href, location.href).pathname.match(/\/films\/([^/?#]+)/)?.[1];
 
+  function track(v) {
+    views.push(v);
+    request({ type: "film", slug: v.slug }).then((res) => { v.res = res; render(v); });
+  }
+
   function scan() {
-    for (const a of document.querySelectorAll('h3 a[href*="/films/"]')) {
-      if (done.has(a)) continue;
-      done.add(a);
-      const slug = slugOf(a.href);
-      if (!slug) continue;
-      const holder = document.createElement("div");
-      a.closest("h3").after(holder);
-      const v = { holder, slug, title: a.textContent.trim(), detail: false };
-      views.push(v);
-      request({ type: "film", slug }).then((res) => { v.res = res; render(v); });
+    if (settings.showOnList) {
+      for (const a of document.querySelectorAll('h3 a[href*="/films/"]')) {
+        if (done.has(a)) continue;
+        done.add(a);
+        const slug = slugOf(a.href);
+        if (!slug) continue;
+        const holder = h("div");
+        a.closest("h3").after(holder);
+        track({ holder, slug, title: a.textContent.trim(), detail: false });
+      }
     }
     const slug = /\/films\/[^/]+\/?$/.test(location.pathname) && slugOf(location.href);
     const h1 = slug && document.querySelector("h1");
     if (h1 && !done.has(h1)) {
       done.add(h1);
-      const holder = document.createElement("div");
+      const holder = h("div");
       h1.after(holder);
-      const v = { holder, slug, title: h1.textContent.trim(), detail: true };
-      views.push(v);
-      request({ type: "film", slug }).then((res) => { v.res = res; render(v); });
+      // 简介和短评放在正文末尾,即 Cineville 自己的简介下方
+      const extra = h("div", "cvr-extra");
+      (h1.closest("main") || h1.parentElement).append(extra);
+      track({ holder, extra, slug, title: h1.textContent.trim(), detail: true });
     }
   }
 
-  chrome.storage.sync.get(DEFAULTS).then((s) => {
-    settings = { ...DEFAULTS, ...s };
-    scan();
-  });
+  const load = () => chrome.storage.sync.get(DEFAULTS).then((s) => (settings = { ...DEFAULTS, ...s }));
+  load().then(scan);
   chrome.storage.onChanged.addListener((_c, area) => {
     if (area !== "sync") return;
-    chrome.storage.sync.get(DEFAULTS).then((s) => {
-      settings = { ...DEFAULTS, ...s };
+    load().then(() => {
       for (const v of views) if (v.res && v.holder.isConnected) render(v);
+      scan();
     });
   });
 
