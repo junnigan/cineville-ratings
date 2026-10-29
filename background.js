@@ -236,7 +236,7 @@ function tmdbTexts(d) {
   for (const t of d.translations?.translations || []) {
     const lang = tmdbLang(t);
     if (t.data?.title) titles.push({ lang, text: t.data.title });
-    if (t.data?.overview?.length > 40) descriptions.push({ lang, text: t.data.overview.trim(), src: "TMDB" });
+    if (t.data?.overview?.length > 30) descriptions.push({ lang, text: t.data.overview.trim(), src: "TMDB" });
   }
   if (d.overview) descriptions.push({ lang: "en", text: d.overview.trim(), src: "TMDB" });
   return { titles, descriptions };
@@ -291,7 +291,7 @@ async function lookup(slug, locale) {
   const descriptions = [
     ...t.descriptions,
     ...(item?.localized_description || [])
-      .filter((l) => l.text.length > 80)
+      .filter((l) => l.text.length > 30)
       .map((l) => ({ lang: l.lang, text: l.text.trim(), src: "NeoDB" })),
   ].slice(0, 24);
 
