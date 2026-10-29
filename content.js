@@ -11,8 +11,8 @@
   // ---- 界面语言(自动检测浏览器语言,也可在设置里手动选) ----
   const STR = {
     zh: {
-      douban: "豆瓣", blocked: t("blocked"), nokey: t("nokey"),
-      noRating: t("noRating"), failed: "加载失败", notFound: "未找到", synopsis: "简介", source: "来源:", comments: "短评",
+      douban: "豆瓣", blocked: "豆瓣拒绝了请求,请先在此浏览器登录豆瓣", nokey: "在设置里填写 OMDb key 才能显示 IMDb 评分",
+      noRating: "暂无评分", failed: "加载失败", notFound: "未找到", synopsis: "简介", source: "来源:", comments: "短评",
       watched: "看过", helpful: "有用", likes: "赞", translateLink: "翻译", showOriginal: "显示原文",
       translateFirst: "翻译(首次需下载语言包)", expand: "展开", collapse: "收起",
       fabTitle: "Cineville Ratings 设置", hLang: "语言 / Language", uiLang: "界面语言", hRatings: "评分来源",
@@ -22,7 +22,7 @@
       commentTmdb: "来自 TMDB(英文为主)", autoTranslate: "豆瓣短评拿不到时,自动翻译外语短评(Chrome 内置翻译)",
       commentCount: "最多显示条数", hKeys: "API Key(免费申请,只保存在本浏览器)",
       tmdbKey: "TMDB(themoviedb.org):匹配、译名、简介、评论", omdbKey: "OMDb(omdbapi.com):IMDb 评分",
-      getKey: t("getKey"), saved: "已保存", clear: "清除缓存", cleared: "缓存已清除,刷新页面生效",
+      getKey: "免费申请 Key ↗", saved: "已保存", clear: "清除缓存", cleared: "缓存已清除,刷新页面生效",
       credit: "This product uses the TMDB API but is not endorsed or certified by TMDB. 数据来源:TMDB、NeoDB、OMDb、豆瓣。",
     },
     en: {
