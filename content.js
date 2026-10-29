@@ -210,7 +210,8 @@
     const row = h("div", "cvr-cmt");
     const head = h("div", "cvr-head");
     const u = h(c.url ? "a" : "span", null, c.user);
-    if (c.url) Object.assign(u, { href: c.url, target: "_blank", rel: "noopener" });
+    // 评论链接来自第三方数据,只允许 http(s),避免 javascript: 之类的链接
+    if (/^https?:\/\//i.test(c.url || "")) Object.assign(u, { href: c.url, target: "_blank", rel: "noopener" });
     head.append(u);
     if (t("watched")) head.append(t("watched"));
     if (c.stars) head.append(stars(Math.round(c.stars)));
@@ -309,6 +310,13 @@
 
   // ---- 扫描页面 ----
   function scan() {
+    // 标题元素已被站点换掉(站内跳转、轮播刷新)时,清掉它留下的评分标签和简介
+    for (const [ref, v] of views) {
+      if (ref.isConnected) continue;
+      v.holder?.remove();
+      v.extra?.remove();
+      views.delete(ref);
+    }
     if (settings.showOnList) {
       for (const a of document.querySelectorAll('h3 a[href*="/films/"]')) {
         const slug = slugOf(a.href);
@@ -332,6 +340,8 @@
       if (!v) { v = { ref: h1, detail: true }; views.set(h1, v); }
       v.holder?.remove();
       v.extra?.remove();
+      // 站内跳转时 <main> 可能被复用,清掉上一部电影遗留的简介/短评
+      document.querySelectorAll(".cvr-extra").forEach((e) => e.remove());
       v.holder = h("div");
       h1.after(v.holder);
       // 简介和短评放在正文末尾,即 Cineville 自己的简介下方
