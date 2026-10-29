@@ -156,9 +156,19 @@
     if (c.stars) head.append(stars(Math.round(c.stars)));
     head.append(h("span", "cvr-from", { douban: "豆瓣", neodb: "NeoDB", tmdb: "TMDB" }[c.src]));
     if (c.likes) head.append(h("span", "cvr-vote", `${c.likes} ${c.src === "douban" ? "有用" : "赞"}`));
-    const original = c.text.length > 240 ? c.text.slice(0, 240) + "…" : c.text;
+    const original = c.text;
     const body = h("p", null, original);
     row.append(head, body);
+    // 长评先折叠成几行,点"展开"看全文
+    if (original.length > 180) {
+      body.classList.add("cvr-clamp");
+      const more = h("a", "cvr-tr", "展开");
+      more.addEventListener("click", () => {
+        const open = body.classList.toggle("cvr-clamp");
+        more.textContent = open ? "展开" : "收起";
+      });
+      row.append(more);
+    }
 
     // 外语短评:提供"翻译"链接;豆瓣短评不可用时自动翻译
     if (c.lang && c.lang !== targetCode().split("-")[0] && "Translator" in self) {
