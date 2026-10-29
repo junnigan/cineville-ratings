@@ -1,5 +1,5 @@
 const TTL = 7 * 24 * 3600 * 1000;
-const CV = "https://cineville.nl/nl-NL/films/";
+const cvUrl = (locale, slug) => `https://cineville.nl/${locale}/films/${slug}`;
 
 const norm = (s) =>
   (s || "")
@@ -23,8 +23,8 @@ const getSettings = () => chrome.storage.sync.get({ omdbKey: "" });
 
 // ---- Cineville ----
 
-async function cinevilleMeta(slug) {
-  const r = await fetch(CV + slug);
+async function cinevilleMeta(slug, locale) {
+  const r = await fetch(cvUrl(locale, slug));
   if (!r.ok) throw new Error("Cineville " + r.status);
   const html = await r.text();
   const raw = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)?.[1];
@@ -33,7 +33,7 @@ async function cinevilleMeta(slug) {
     title: f.title,
     year: f.releaseYear,
     directors: f.directors || [],
-    description: (f.description || f.shortDescription || "").trim(),
+    description: (f.description || "").trim(), // 页面只显示 description,不含 shortDescription
   };
 }
 
@@ -135,8 +135,8 @@ async function imdbInfo(id, omdbKey) {
 
 // ---- main lookup ----
 
-async function lookup(slug) {
-  const meta = await cinevilleMeta(slug);
+async function lookup(slug, locale) {
+  const meta = await cinevilleMeta(slug, locale);
   const item = await neodbLookup(meta);
   if (!item) return { found: false, meta };
 
@@ -209,7 +209,7 @@ async function neodbComments(uuid, lang) {
 
 chrome.runtime.onMessage.addListener((msg, _s, send) => {
   if (msg?.type === "film") {
-    cached("v3:" + msg.slug, () => lookup(msg.slug)).then(send, (e) => send({ error: String(e) }));
+    cached(`v5:${msg.locale}:${msg.slug}`, () => lookup(msg.slug, msg.locale)).then(send, (e) => send({ error: String(e) }));
     return true;
   }
   if (msg?.type === "comments") {
@@ -224,5 +224,5 @@ chrome.runtime.onMessage.addListener((msg, _s, send) => {
 chrome.storage.onChanged.addListener(async (_c, area) => {
   if (area !== "sync" || !_c.omdbKey) return;
   const all = await chrome.storage.local.get(null);
-  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("v3:")));
+  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("v5:")));
 });

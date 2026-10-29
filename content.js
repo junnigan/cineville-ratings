@@ -140,6 +140,8 @@
   async function render(v) {
     const listHidden = !v.detail && !settings.showOnList;
     const b = listHidden ? null : badge(v);
+    // 深色横幅等位置:文字颜色跟随旁边的标题,避免看不清
+    if (v.ref?.isConnected) v.holder.style.color = getComputedStyle(v.ref).color;
     b ? v.holder.replaceChildren(b) : v.holder.replaceChildren();
     if (!v.detail || !v.res?.found) return;
 
@@ -151,11 +153,13 @@
   }
 
   // ---- 扫描页面 ----
+  // 按页面当前语言版本取简介(英文版和荷兰语版的简介可能不同)
+  const locale = /^\/([a-z]{2}-[A-Z]{2})\//.exec(location.pathname)?.[1] || "nl-NL";
   const slugOf = (href) => new URL(href, location.href).pathname.match(/\/films\/([^/?#]+)/)?.[1];
 
   function track(v) {
     views.push(v);
-    request({ type: "film", slug: v.slug }).then((res) => { v.res = res; render(v); });
+    request({ type: "film", slug: v.slug, locale }).then((res) => { v.res = res; render(v); });
   }
 
   function scan() {
@@ -167,7 +171,7 @@
         if (!slug) continue;
         const holder = h("div");
         a.closest("h3").after(holder);
-        track({ holder, slug, title: a.textContent.trim(), detail: false });
+        track({ holder, ref: a, slug, title: a.textContent.trim(), detail: false });
       }
     }
     const slug = /\/films\/[^/]+\/?$/.test(location.pathname) && slugOf(location.href);
@@ -179,7 +183,7 @@
       // 简介和短评放在正文末尾,即 Cineville 自己的简介下方
       const extra = h("div", "cvr-extra");
       (h1.closest("main") || h1.parentElement).append(extra);
-      track({ holder, extra, slug, title: h1.textContent.trim(), detail: true });
+      track({ holder, extra, ref: h1, slug, title: h1.textContent.trim(), detail: true });
     }
   }
 
