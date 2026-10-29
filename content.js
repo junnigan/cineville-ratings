@@ -1,4 +1,5 @@
 (() => {
+  const ext = typeof browser !== "undefined" ? browser : chrome; // Firefox 用 browser(保证返回 Promise),Chrome 用 chrome
   const browserLang = (navigator.language || "en").toLowerCase();
   const DEFAULTS = {
     showDouban: true, showImdb: true, showNeodb: true, showTmdb: true, showOnList: true, hideNotFound: false,
@@ -41,7 +42,7 @@
       credit: "This product uses the TMDB API but is not endorsed or certified by TMDB. Data from TMDB, NeoDB, OMDb and Douban.",
     },
   };
-  const autoUi = (chrome.i18n?.getUILanguage?.() || browserLang).toLowerCase().startsWith("zh") ? "zh" : "en";
+  const autoUi = (ext.i18n?.getUILanguage?.() || browserLang).toLowerCase().startsWith("zh") ? "zh" : "en";
   const uiLang = () => (settings.uiLang === "zh" || settings.uiLang === "en" ? settings.uiLang : autoUi);
   const t = (k) => STR[uiLang()][k];
 
@@ -77,7 +78,7 @@
     while (active < 4 && queue.length) {
       const { msg, resolve } = queue.shift();
       active++;
-      chrome.runtime.sendMessage(msg).then(resolve, () => resolve({ error: "x" })).finally(() => { active--; pump(); });
+      ext.runtime.sendMessage(msg).then(resolve, () => resolve({ error: "x" })).finally(() => { active--; pump(); });
     }
   }
 
@@ -358,7 +359,8 @@
     const host = h("div");
     host.id = "cvr-settings";
     const root = host.attachShadow({ mode: "open" });
-    root.innerHTML = `<style>
+    const style = h("style");
+    style.textContent = `
       *{box-sizing:border-box}
       .fab{position:fixed;right:16px;bottom:16px;width:40px;height:40px;border:0;border-radius:50%;background:#101a3d;color:#fff;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);z-index:2147483000}
       .panel{position:fixed;right:16px;bottom:64px;width:320px;max-height:70vh;overflow:auto;padding:14px 16px;background:#fff;color:#1a1a1a;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.28);font:14px/1.5 var(--fonts-averta,system-ui,sans-serif);z-index:2147483000;text-align:left}
@@ -369,9 +371,11 @@
       a.getkey{display:inline-block;margin-top:4px;padding:3px 10px;border:1px solid #101a3d;border-radius:999px;color:#101a3d;font-size:12px;text-decoration:none;align-self:flex-start}a.getkey:hover{background:#101a3d;color:#fff}
       button.clear{margin-top:12px;padding:4px 10px;font:inherit}
       .credit{display:block;margin-top:10px;color:#888;font-size:11px;line-height:1.4}.msg{color:#2e963d;font-size:12px;min-height:1em;margin-top:6px}
-    </style>
-    <button class="fab" title="${t("fabTitle")}">⚙</button><div class="panel" hidden></div>`;
-    const panel = root.querySelector(".panel");
+    `;
+    const fab = Object.assign(h("button", "fab", "⚙"), { title: t("fabTitle") });
+    const panel = h("div", "panel");
+    panel.hidden = true;
+    root.append(style, fab, panel);
     const msg = h("div", "msg");
     const flash = (text) => { msg.textContent = text; setTimeout(() => (msg.textContent = ""), 1500); };
     for (const f of schema()) {
@@ -397,16 +401,16 @@
       }
       input.addEventListener("change", () => {
         const val = input.type === "checkbox" ? input.checked : input.value.trim();
-        chrome.storage.sync.set({ [f.k]: val });
+        ext.storage.sync.set({ [f.k]: val });
         flash(t("saved"));
       });
       panel.append(lab);
     }
     const clear = h("button", "clear", t("clear"));
-    clear.addEventListener("click", () => chrome.runtime.sendMessage({ type: "clearCache" }).then(() => flash(t("cleared"))));
+    clear.addEventListener("click", () => ext.runtime.sendMessage({ type: "clearCache" }).then(() => flash(t("cleared"))));
     const credit = h("small", "credit", t("credit"));
     panel.append(clear, msg, credit);
-    root.querySelector(".fab").addEventListener("click", () => (panel.hidden = !panel.hidden));
+    fab.addEventListener("click", () => (panel.hidden = !panel.hidden));
     document.documentElement.append(host);
     return panel;
   }
@@ -416,13 +420,13 @@
     panel ||= buildPanel();
     panel.hidden = !panel.hidden;
   };
-  chrome.runtime.onMessage.addListener((m) => m?.type === "togglePanel" && togglePanel());
+  ext.runtime.onMessage.addListener((m) => m?.type === "togglePanel" && togglePanel());
 
-  const loadSettings = () => chrome.storage.sync.get(DEFAULTS).then((s) => (settings = { ...DEFAULTS, ...s }));
+  const loadSettings = () => ext.storage.sync.get(DEFAULTS).then((s) => (settings = { ...DEFAULTS, ...s }));
   loadSettings().then(() => { buildPanelOnce(); scan(); });
   function buildPanelOnce() { panel ||= buildPanel(); }
 
-  chrome.storage.onChanged.addListener((_c, area) => {
+  ext.storage.onChanged.addListener((_c, area) => {
     if (area !== "sync") return;
     loadSettings().then(() => {
       if (panel && builtUi !== uiLang()) {

@@ -59,3 +59,15 @@ Show film ratings, localized titles, synopses and short reviews on cineville.nl 
 3. Reviews section (Douban-style list)
 4. Settings panel (⚙), in English and in Chinese
 5. A film with no Cineville synopsis that has been filled in
+
+---
+
+# Firefox (addons.mozilla.org)
+
+- Build: `./scripts/package-firefox.sh` → `dist/cineville-ratings-firefox-<version>.zip`. Only the manifest differs from the Chrome build (background `scripts` instead of a service worker, plus `browser_specific_settings`).
+- Add-on ID: `cineville-ratings@junnigan.github.io` (keep it stable across releases)
+- Minimum versions: Firefox 140 desktop, 142 Android (needed for the data collection declaration)
+- Data collection declaration: `websiteContent` (film title/year/directors/cast are read from the page and sent to the lookup services listed in PRIVACY.md). Nothing is sent to the developer.
+- Source code: the package is not minified or bundled, so the uploaded zip is the source. Select "No" when asked for separate source code.
+- Listing text, summary, categories (Entertainment) and permission justifications: reuse the Chrome text above. Add Firefox-specific note: "No built-in translator in Firefox, so the review translate link is hidden there."
+- Reviewer notes: "Douban requests rely on the user's own logged-in session; the extension never reads credentials. TMDB/OMDb keys are entered by the user and stored in browser.storage.sync."

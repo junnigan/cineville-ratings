@@ -19,6 +19,11 @@ A Chrome extension (Manifest V3) that adds ratings, localized titles, synopses a
 2. Open `chrome://extensions` and turn on **Developer mode**
 3. Click **Load unpacked** and select the cloned folder
 
+### Firefox (desktop and Android)
+
+Run `./scripts/package-firefox.sh`, then in Firefox open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on** and pick `dist/firefox-build/manifest.json`. (A signed release will be published on addons.mozilla.org.) After installing, make sure the extension is allowed to access the sites it lists. On Firefox for Android, install it from the add-ons menu once it is published.
+Firefox has no built-in translator, so the review "Translate" link is not shown there.
+
 Review translation needs Chrome 138 or newer. The first translation for a language pair downloads a small language pack.
 
 ## Data sources and API keys

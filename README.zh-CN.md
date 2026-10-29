@@ -19,6 +19,11 @@
 2. 打开 `chrome://extensions`,开启"开发者模式"
 3. 点"加载已解压的扩展程序",选择克隆下来的文件夹
 
+### Firefox(电脑版和安卓版)
+
+运行 `./scripts/package-firefox.sh`,然后在 Firefox 打开 `about:debugging#/runtime/this-firefox`,点"临时载入附加组件",选 `dist/firefox-build/manifest.json`。(正式签名版会发布到 addons.mozilla.org。)安装后请确认扩展被允许访问它列出的网站。安卓版 Firefox 等正式上架后,可以直接在附加组件菜单里安装。
+Firefox 没有内置翻译功能,所以那里不会显示短评的"翻译"链接。
+
 短评翻译需要 Chrome 138 或更新版本。某个语言对第一次翻译时,会下载一个很小的语言包。
 
 ## 数据来源和 API Key

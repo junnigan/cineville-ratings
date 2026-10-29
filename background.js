@@ -1,3 +1,4 @@
+const ext = typeof browser !== "undefined" ? browser : chrome; // Firefox 用 browser(保证返回 Promise),Chrome 用 chrome
 const TTL = 7 * 24 * 3600 * 1000;
 const cvUrl = (locale, slug) => `https://cineville.nl/${locale}/films/${slug}`;
 
@@ -10,16 +11,16 @@ const norm = (s) =>
     .trim();
 
 async function cached(key, fn, ttl = TTL) {
-  const hit = (await chrome.storage.local.get(key))[key];
+  const hit = (await ext.storage.local.get(key))[key];
   // 部分失败的结果(豆瓣被拦、IMDb 没拿到)只缓存 10 分钟,方便登录/填 key 后重试
   const life = hit?.v?.partial ? 10 * 60 * 1000 : ttl;
   if (hit && Date.now() - hit.t < life) return hit.v;
   const v = await fn();
-  await chrome.storage.local.set({ [key]: { t: Date.now(), v } });
+  await ext.storage.local.set({ [key]: { t: Date.now(), v } });
   return v;
 }
 
-const getSettings = () => chrome.storage.sync.get({ omdbKey: "", tmdbKey: "" });
+const getSettings = () => ext.storage.sync.get({ omdbKey: "", tmdbKey: "" });
 
 // ---- Cineville ----
 
@@ -351,7 +352,7 @@ async function neodbComments(uuid, lang) {
     .slice(0, 10);
 }
 
-chrome.runtime.onMessage.addListener((msg, _s, send) => {
+ext.runtime.onMessage.addListener((msg, _s, send) => {
   if (msg?.type === "film") {
     cached(`v7:${msg.locale}:${msg.slug}`, () => lookup(msg.slug, msg.locale)).then(send, (e) => send({ error: String(e) }));
     return true;
@@ -365,19 +366,19 @@ chrome.runtime.onMessage.addListener((msg, _s, send) => {
   }
 });
 
-chrome.storage.onChanged.addListener(async (_c, area) => {
+ext.storage.onChanged.addListener(async (_c, area) => {
   if (area !== "sync" || !(_c.omdbKey || _c.tmdbKey)) return;
-  const all = await chrome.storage.local.get(null);
-  await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("v7:")));
+  const all = await ext.storage.local.get(null);
+  await ext.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("v7:")));
 });
 
-chrome.runtime.onMessage.addListener((msg, _s, send) => {
+ext.runtime.onMessage.addListener((msg, _s, send) => {
   if (msg?.type !== "clearCache") return;
-  chrome.storage.local.clear().then(() => send(true));
+  ext.storage.local.clear().then(() => send(true));
   return true;
 });
 
 // 点工具栏图标:在当前 Cineville 页面打开设置面板
-chrome.action.onClicked.addListener((tab) => {
-  chrome.tabs.sendMessage(tab.id, { type: "togglePanel" }).catch(() => {});
+ext.action.onClicked.addListener((tab) => {
+  ext.tabs.sendMessage(tab.id, { type: "togglePanel" }).catch(() => {});
 });
