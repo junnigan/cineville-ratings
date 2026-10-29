@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Cineville Ratings",
-  "version": "0.3.0",
-  "description": "在 Cineville 上显示每部电影的豆瓣 / IMDb / NeoDB 评分、官方译名和短评。",
+  "version": "0.4.0",
+  "description": "Shows TMDB / IMDb / NeoDB / Douban ratings, localized titles, synopses and short reviews on Cineville.",
   "permissions": [
     "storage"
   ],
@@ -33,6 +33,6 @@
     }
   ],
   "action": {
-    "default_title": "Cineville Ratings 设置"
+    "default_title": "Cineville Ratings settings"
   }
 }

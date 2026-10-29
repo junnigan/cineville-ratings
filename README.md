@@ -1,45 +1,54 @@
 # Cineville Ratings
 
-在 [Cineville](https://cineville.nl) 电影页上显示评分、官方译名、简介和短评的浏览器插件(Chrome,Manifest V3)。
+**English** · [中文](README.zh-CN.md)
 
-Shows ratings, localized titles, synopses and short reviews on cineville.nl.
+A Chrome extension (Manifest V3) that adds ratings, localized titles, synopses and short reviews to [cineville.nl](https://cineville.nl).
 
-## 功能
+## Features
 
-- 列表页、横幅和详情页显示 TMDB / IMDb / NeoDB / 豆瓣评分
-- 官方译名:例如 Léon → 这个杀手不太冷
-- Cineville 没有简介时自动补充;开启翻译时用目标语言的简介替换原简介
-- 详情页短评,多个来源混排
-- 设置面板就在 Cineville 页面右下角(⚙),也可以点工具栏图标打开
+- **Ratings** from TMDB, IMDb, NeoDB and Douban, on film lists, banners and detail pages
+- **Localized titles**: e.g. *Léon* → *这个杀手不太冷* (pick any target language)
+- **Synopsis**: filled in when Cineville has none; with translation on, replaced by the target-language synopsis
+- **Short reviews** on detail pages, mixed from Douban, NeoDB and TMDB, in a Douban-like layout (long reviews fold, with "Show more")
+- **Review translation**: foreign-language reviews can be translated with Chrome's built-in on-device Translator (automatic when Douban reviews are unavailable)
+- **In-page settings**: click the ⚙ button at the bottom right of any Cineville page (or the toolbar icon). The interface language follows your browser and can be changed there
 
-## 安装
+## Install
 
 1. `git clone https://github.com/junnigan/cineville-ratings.git`
-2. 打开 `chrome://extensions`,开启"开发者模式"
-3. 点"加载已解压的扩展程序",选择这个文件夹
+2. Open `chrome://extensions` and turn on **Developer mode**
+3. Click **Load unpacked** and select the cloned folder
 
-## 数据来源和 API Key
+Review translation needs Chrome 138 or newer. The first translation for a language pair downloads a small language pack.
 
-| 来源 | 用途 | 需要 key |
+## Data sources and API keys
+
+| Source | Used for | Key needed |
 |---|---|---|
-| [TMDB](https://www.themoviedb.org/settings/api) | 匹配电影、多语言译名和简介、评分、评论 | 是(免费) |
-| [NeoDB](https://neodb.social) | 评分、短评、华语译名 | 否 |
-| [OMDb](https://www.omdbapi.com/apikey.aspx) | IMDb 评分 | 是(免费,每天 1,000 次) |
-| 豆瓣 | 评分、简介、短评 | 否,但依赖浏览器里已登录的豆瓣 |
+| [TMDB](https://www.themoviedb.org/settings/api) | Matching, localized titles and synopses, rating, reviews | Yes (free) |
+| [NeoDB](https://neodb.social) | Rating, short reviews, Chinese titles | No |
+| [OMDb](https://www.omdbapi.com/apikey.aspx) | IMDb rating | Yes (free, 1,000 requests/day) |
+| Douban | Rating, synopsis, short reviews | No, but needs you to be logged in to Douban in the same browser |
 
-key 在页面右下角的设置面板里填写,只保存在你自己的浏览器里(`chrome.storage.sync`),不会写进代码。不填 key 时,插件仍可使用 NeoDB。
+Open the ⚙ panel on a Cineville page and use the **Get a free key** buttons to sign up. Keys are stored only in your browser (`chrome.storage.sync`) and are never part of this repository. Without keys the extension still works with NeoDB.
 
-豆瓣没有公开 API。插件只是用你已登录的浏览器会话读取页面,没有登录或被拦截时会显示"–",随时可能失效,不保证可用。
+Douban has no public API. The extension only reads pages with your own logged-in session; when it is blocked the Douban badge shows "–". It may stop working at any time.
 
-## 隐私
+IMDb blocks direct page scraping, so IMDb ratings require an OMDb key. OMDb does not provide reviews.
 
-打开电影页时,电影的片名、年份和导演会发送给 TMDB、NeoDB、OMDb(以及豆瓣、IMDb),用于查找评分。结果缓存在本地浏览器,不会发送给其他任何服务器,也不收集任何使用数据。
+## Privacy
 
-## 声明
+When you open a film page, its title, year, directors and cast are sent to TMDB, NeoDB, OMDb (and Douban/IMDb) to look up ratings. Results are cached locally in your browser. Nothing is sent to any other server and no usage data is collected. Review translation runs on-device in Chrome.
+
+## Non-commercial use
+
+This project is free and open source. TMDB's API terms do not allow commercial use without a separate agreement, so please do not add paid tiers, ads or affiliate links, and do not share a single API key between users.
+
+## Attribution
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
-评分和评论版权归各自平台及用户所有。本项目与 Cineville、TMDB、IMDb、豆瓣、NeoDB 没有隶属关系。
+Ratings and reviews belong to their respective platforms and authors. This project is not affiliated with Cineville, TMDB, IMDb, Douban or NeoDB.
 
-## 许可证
+## License
 
-MIT
+[MIT](LICENSE)

@@ -1,11 +1,56 @@
 (() => {
+  const browserLang = (navigator.language || "en").toLowerCase();
   const DEFAULTS = {
     showDouban: true, showImdb: true, showNeodb: true, showTmdb: true, showOnList: true, hideNotFound: false,
-    translate: true, lang: "zh-cn",
+    translate: true, lang: detectTarget(), uiLang: "auto",
     showComments: true, commentDouban: true, commentNeodb: true, commentTmdb: true, commentCount: "8", autoTranslate: true,
     omdbKey: "", tmdbKey: "",
   };
   let settings = { ...DEFAULTS };
+
+  // ---- 界面语言(自动检测浏览器语言,也可在设置里手动选) ----
+  const STR = {
+    zh: {
+      douban: "豆瓣", blocked: t("blocked"), nokey: t("nokey"),
+      noRating: t("noRating"), failed: "加载失败", notFound: "未找到", synopsis: "简介", source: "来源:", comments: "短评",
+      watched: "看过", helpful: "有用", likes: "赞", translateLink: "翻译", showOriginal: "显示原文",
+      translateFirst: "翻译(首次需下载语言包)", expand: "展开", collapse: "收起",
+      fabTitle: "Cineville Ratings 设置", hLang: "语言 / Language", uiLang: "界面语言", hRatings: "评分来源",
+      tmdbNeedsKey: "TMDB(需要填写 key)", showOnList: "在列表页和横幅上也显示", hideNotFound: "找不到时不显示“未找到”",
+      hTranslate: "翻译", translate: "显示官方译名,并用目标语言简介替换原简介", lang: "目标语言",
+      hComments: "短评", showComments: "在详情页显示短评", commentDouban: "来自豆瓣", commentNeodb: "来自 NeoDB",
+      commentTmdb: "来自 TMDB(英文为主)", autoTranslate: "豆瓣短评拿不到时,自动翻译外语短评(Chrome 内置翻译)",
+      commentCount: "最多显示条数", hKeys: "API Key(免费申请,只保存在本浏览器)",
+      tmdbKey: "TMDB(themoviedb.org):匹配、译名、简介、评论", omdbKey: "OMDb(omdbapi.com):IMDb 评分",
+      getKey: t("getKey"), saved: "已保存", clear: "清除缓存", cleared: "缓存已清除,刷新页面生效",
+      credit: "This product uses the TMDB API but is not endorsed or certified by TMDB. 数据来源:TMDB、NeoDB、OMDb、豆瓣。",
+    },
+    en: {
+      douban: "Douban", blocked: "Douban refused the request. Log in to Douban in this browser first.", nokey: "Add an OMDb key in settings to show IMDb ratings",
+      noRating: "No rating yet", failed: "Failed to load", notFound: "Not found", synopsis: "Synopsis", source: "Source: ", comments: "Reviews",
+      watched: "", helpful: "helpful", likes: "likes", translateLink: "Translate", showOriginal: "Show original",
+      translateFirst: "Translate (downloads language pack first)", expand: "Show more", collapse: "Show less",
+      fabTitle: "Cineville Ratings settings", hLang: "Language / 语言", uiLang: "Interface language", hRatings: "Rating sources",
+      tmdbNeedsKey: "TMDB (needs a key)", showOnList: "Also show on film lists and banners", hideNotFound: "Hide “Not found” badges",
+      hTranslate: "Translation", translate: "Show localized titles and replace the synopsis with the target language", lang: "Target language",
+      hComments: "Reviews", showComments: "Show reviews on film pages", commentDouban: "From Douban", commentNeodb: "From NeoDB",
+      commentTmdb: "From TMDB (mostly English)", autoTranslate: "Auto-translate foreign reviews when Douban reviews are unavailable (Chrome built-in)",
+      commentCount: "Max reviews shown", hKeys: "API keys (free, stored only in this browser)",
+      tmdbKey: "TMDB (themoviedb.org): matching, titles, synopses, reviews", omdbKey: "OMDb (omdbapi.com): IMDb ratings",
+      getKey: "Get a free key ↗", saved: "Saved", clear: "Clear cache", cleared: "Cache cleared. Reload the page to apply.",
+      credit: "This product uses the TMDB API but is not endorsed or certified by TMDB. Data from TMDB, NeoDB, OMDb and Douban.",
+    },
+  };
+  const autoUi = (chrome.i18n?.getUILanguage?.() || browserLang).toLowerCase().startsWith("zh") ? "zh" : "en";
+  const uiLang = () => (settings.uiLang === "zh" || settings.uiLang === "en" ? settings.uiLang : autoUi);
+  const t = (k) => STR[uiLang()][k];
+
+  // 首次使用时,目标语言默认取浏览器语言
+  function detectTarget() {
+    if (/^zh-(tw|hk|mo|hant)/.test(browserLang)) return "zh-tw";
+    const base = browserLang.split("-")[0];
+    return ["zh", "en", "ja", "ko", "fr", "de", "es", "nl"].includes(base) ? (base === "zh" ? "zh-cn" : base) : "en";
+  }
   const views = new Map(); // 页面元素(标题链接 / h1) -> view,轮播切换时复用同一个元素
 
   const ALIASES = { "zh-cn": ["zh-cn", "zh-hans", "zh"], "zh-tw": ["zh-tw", "zh-hant", "zh-hk", "zh"] };
@@ -50,10 +95,10 @@
     if (d?.url) Object.assign(e, { href: d.url, target: "_blank", rel: "noopener" });
     e.append(h("i", null, label), h("b", null, d?.rating ? d.rating.toFixed(1) : "–"));
     if (d?.count) e.title = `${d.count.toLocaleString()} ratings`;
-    else if (d?.blocked) e.title = "豆瓣拒绝了请求,请先在此浏览器登录豆瓣";
-    else if (d?.error === "nokey") e.title = "在设置里填写 OMDb key 才能显示 IMDb 评分";
+    else if (d?.blocked) e.title = t("blocked");
+    else if (d?.error === "nokey") e.title = t("nokey");
     else if (d?.error) e.title = d.error;
-    else if (d?.url && !d.rating) e.title = "暂无评分";
+    else if (d?.url && !d.rating) e.title = t("noRating");
     return e;
   }
 
@@ -62,14 +107,14 @@
     const b = h("div", "cvr-badge");
     if (!res || res.error || !res.found) {
       if (settings.hideNotFound && !res?.error) return null;
-      b.append(h("span", "cvr-chip cvr-muted", res?.error ? "加载失败" : "未找到"));
+      b.append(h("span", "cvr-chip cvr-muted", res?.error ? t("failed") : t("notFound")));
       return b;
     }
     if (settings.translate) {
-      const t = pick(res.titles, settings.lang);
-      if (t && norm(t) !== norm(title)) b.append(h("div", "cvr-title", t));
+      const local = pick(res.titles, settings.lang);
+      if (local && norm(local) !== norm(title)) b.append(h("div", "cvr-title", local));
     }
-    if (settings.showDouban) b.append(chip("cvr-douban", "豆瓣", res.douban));
+    if (settings.showDouban) b.append(chip("cvr-douban", t("douban"), res.douban));
     if (settings.showImdb) b.append(chip("cvr-imdb", "IMDb", res.imdb));
     if (settings.showNeodb && res.neodb) b.append(chip("cvr-neodb", "NeoDB", res.neodb));
     if (settings.showTmdb && res.tmdb) b.append(chip("cvr-tmdb", "TMDB", res.tmdb));
@@ -86,7 +131,7 @@
       const d = (res.descriptions || []).find((x) => x.lang === code);
       if (d) cands.push({ lang, text: d.text, src: d.src || "NeoDB" });
     }
-    if (res.douban?.summary) cands.push({ lang: "zh", text: res.douban.summary, src: "豆瓣" });
+    if (res.douban?.summary) cands.push({ lang: "zh", text: res.douban.summary, src: t("douban") });
     if (res.imdb?.plot) cands.push({ lang: "en", text: res.imdb.plot, src: "IMDb" });
     const en = (res.descriptions || []).find((x) => x.lang === "en");
     if (en) cands.push({ lang: "en", text: en.text, src: en.src || "NeoDB" });
@@ -100,10 +145,10 @@
 
   function synopsisBlock(s) {
     const sec = h("section", "cvr-sec");
-    sec.append(h("h3", null, "简介"));
+    sec.append(h("h3", null, t("synopsis")));
     const cls = document.querySelector('p[class*="variant-body"]')?.className;
     for (const para of s.text.split(/\n+/).filter(Boolean)) sec.append(h("p", cls, para));
-    sec.append(h("span", "cvr-src", `来源:${s.src}`));
+    sec.append(h("span", "cvr-src", `${t("source")}${s.src}`));
     return sec;
   }
 
@@ -131,16 +176,16 @@
     if (src === target.split("-")[0]) return null;
     const key = `${src}>${target}`;
     try {
-      let t = translators.get(key);
-      if (!t) {
+      let tr = translators.get(key);
+      if (!tr) {
         const opts = { sourceLanguage: src, targetLanguage: target };
         const avail = await Translator.availability(opts);
         if (avail === "unavailable") return null;
         if (avail !== "available" && !userInitiated) return "click";
-        t = await Translator.create(opts);
-        translators.set(key, t);
+        tr = await Translator.create(opts);
+        translators.set(key, tr);
       }
-      return await t.translate(text);
+      return await tr.translate(text);
     } catch {
       return null;
     }
@@ -152,37 +197,37 @@
     const u = h(c.url ? "a" : "span", null, c.user);
     if (c.url) Object.assign(u, { href: c.url, target: "_blank", rel: "noopener" });
     head.append(u);
-    if (isZh()) head.append("看过");
+    if (t("watched")) head.append(t("watched"));
     if (c.stars) head.append(stars(Math.round(c.stars)));
-    head.append(h("span", "cvr-from", { douban: "豆瓣", neodb: "NeoDB", tmdb: "TMDB" }[c.src]));
-    if (c.likes) head.append(h("span", "cvr-vote", `${c.likes} ${c.src === "douban" ? "有用" : "赞"}`));
+    head.append(h("span", "cvr-from", { douban: t("douban"), neodb: "NeoDB", tmdb: "TMDB" }[c.src]));
+    if (c.likes) head.append(h("span", "cvr-vote", `${c.likes} ${c.src === "douban" ? t("helpful") : t("likes")}`));
     const original = c.text;
     const body = h("p", null, original);
     row.append(head, body);
     // 长评先折叠成几行,点"展开"看全文
     if (original.length > 180) {
       body.classList.add("cvr-clamp");
-      const more = h("a", "cvr-tr", "展开");
+      const more = h("a", "cvr-tr", t("expand"));
       more.addEventListener("click", () => {
         const open = body.classList.toggle("cvr-clamp");
-        more.textContent = open ? "展开" : "收起";
+        more.textContent = open ? t("expand") : t("collapse");
       });
       row.append(more);
     }
 
     // 外语短评:提供"翻译"链接;豆瓣短评不可用时自动翻译
     if (c.lang && c.lang !== targetCode().split("-")[0] && "Translator" in self) {
-      const link = h("a", "cvr-tr", "翻译");
+      const link = h("a", "cvr-tr", t("translateLink"));
       let translated = null, showing = false;
       const apply = async (userInitiated) => {
-        if (showing) { body.textContent = original; link.textContent = "翻译"; showing = false; return; }
+        if (showing) { body.textContent = original; link.textContent = t("translateLink"); showing = false; return; }
         translated ||= await translate(original, c.lang, userInitiated);
         if (translated && translated !== "click") {
           body.textContent = translated;
-          link.textContent = "显示原文";
+          link.textContent = t("showOriginal");
           showing = true;
         } else if (translated === "click") {
-          link.textContent = "翻译(首次需下载语言包)";
+          link.textContent = t("translateFirst");
           translated = null;
         }
       };
@@ -212,7 +257,7 @@
     const items = interleave(lists, +settings.commentCount || 8);
     if (!items.length) return null;
     const sec = h("section", "cvr-sec");
-    sec.append(h("h3", null, "短评"));
+    sec.append(h("h3", null, t("comments")));
     const doubanMissing = !res.douban?.comments?.length;
     for (const c of items) sec.append(commentRow(c, settings.autoTranslate && doubanMissing));
     return sec;
@@ -283,30 +328,33 @@
   }
 
   // ---- 页面内设置面板 ----
-  const SCHEMA = [
-    { head: "评分来源" },
-    { k: "showDouban", l: "豆瓣" },
+  const schema = () => [
+    { head: t("hLang") },
+    { k: "uiLang", l: t("uiLang"), opts: [["auto", "Auto / 自动"], ["zh", "中文"], ["en", "English"]] },
+    { head: t("hRatings") },
+    { k: "showDouban", l: t("douban") },
     { k: "showImdb", l: "IMDb" },
     { k: "showNeodb", l: "NeoDB" },
-    { k: "showTmdb", l: "TMDB(需要填写 key)" },
-    { k: "showOnList", l: "在列表页和横幅上也显示" },
-    { k: "hideNotFound", l: "找不到时不显示“未找到”" },
-    { head: "翻译" },
-    { k: "translate", l: "显示官方译名,并用目标语言简介替换原简介" },
-    { k: "lang", l: "目标语言", opts: [["zh-cn", "简体中文"], ["zh-tw", "繁體中文"], ["en", "English"], ["ja", "日本語"], ["ko", "한국어"], ["fr", "Français"], ["de", "Deutsch"], ["es", "Español"], ["nl", "Nederlands"]] },
-    { head: "短评" },
-    { k: "showComments", l: "在详情页显示短评" },
-    { k: "commentDouban", l: "来自豆瓣" },
-    { k: "commentNeodb", l: "来自 NeoDB" },
-    { k: "commentTmdb", l: "来自 TMDB(英文为主)" },
-    { k: "autoTranslate", l: "豆瓣短评拿不到时,自动翻译外语短评(Chrome 内置翻译)" },
-    { k: "commentCount", l: "最多显示条数", opts: [["3", "3"], ["5", "5"], ["8", "8"], ["12", "12"]] },
-    { head: "API Key(免费申请,只保存在本浏览器)" },
-    { k: "tmdbKey", l: "TMDB(themoviedb.org):匹配、译名、简介、评论", text: true, link: "https://www.themoviedb.org/settings/api" },
-    { k: "omdbKey", l: "OMDb(omdbapi.com):IMDb 评分", text: true, link: "https://www.omdbapi.com/apikey.aspx" },
+    { k: "showTmdb", l: t("tmdbNeedsKey") },
+    { k: "showOnList", l: t("showOnList") },
+    { k: "hideNotFound", l: t("hideNotFound") },
+    { head: t("hTranslate") },
+    { k: "translate", l: t("translate") },
+    { k: "lang", l: t("lang"), opts: [["zh-cn", "简体中文"], ["zh-tw", "繁體中文"], ["en", "English"], ["ja", "日本語"], ["ko", "한국어"], ["fr", "Français"], ["de", "Deutsch"], ["es", "Español"], ["nl", "Nederlands"]] },
+    { head: t("hComments") },
+    { k: "showComments", l: t("showComments") },
+    { k: "commentDouban", l: t("commentDouban") },
+    { k: "commentNeodb", l: t("commentNeodb") },
+    { k: "commentTmdb", l: t("commentTmdb") },
+    { k: "autoTranslate", l: t("autoTranslate") },
+    { k: "commentCount", l: t("commentCount"), opts: [["3", "3"], ["5", "5"], ["8", "8"], ["12", "12"]] },
+    { head: t("hKeys") },
+    { k: "tmdbKey", l: t("tmdbKey"), text: true, link: "https://www.themoviedb.org/settings/api" },
+    { k: "omdbKey", l: t("omdbKey"), text: true, link: "https://www.omdbapi.com/apikey.aspx" },
   ];
 
   function buildPanel() {
+    builtUi = uiLang();
     const host = h("div");
     host.id = "cvr-settings";
     const root = host.attachShadow({ mode: "open" });
@@ -322,11 +370,11 @@
       button.clear{margin-top:12px;padding:4px 10px;font:inherit}
       .credit{display:block;margin-top:10px;color:#888;font-size:11px;line-height:1.4}.msg{color:#2e963d;font-size:12px;min-height:1em;margin-top:6px}
     </style>
-    <button class="fab" title="Cineville Ratings 设置">⚙</button><div class="panel" hidden></div>`;
+    <button class="fab" title="${t("fabTitle")}">⚙</button><div class="panel" hidden></div>`;
     const panel = root.querySelector(".panel");
     const msg = h("div", "msg");
-    const flash = (t) => { msg.textContent = t; setTimeout(() => (msg.textContent = ""), 1500); };
-    for (const f of SCHEMA) {
+    const flash = (text) => { msg.textContent = text; setTimeout(() => (msg.textContent = ""), 1500); };
+    for (const f of schema()) {
       if (f.head) { panel.append(h("h4", null, f.head)); continue; }
       const lab = h("label", f.opts || f.text ? "col" : "");
       let input;
@@ -339,7 +387,7 @@
         input = Object.assign(h("input"), { type: "text", value: settings[f.k] });
         lab.append(h("span", null, f.l), input);
         if (f.link) {
-          const a = h("a", "getkey", "免费申请 Key ↗");
+          const a = h("a", "getkey", t("getKey"));
           Object.assign(a, { href: f.link, target: "_blank", rel: "noopener" });
           lab.append(a);
         }
@@ -350,20 +398,20 @@
       input.addEventListener("change", () => {
         const val = input.type === "checkbox" ? input.checked : input.value.trim();
         chrome.storage.sync.set({ [f.k]: val });
-        flash("已保存");
+        flash(t("saved"));
       });
       panel.append(lab);
     }
-    const clear = h("button", "clear", "清除缓存");
-    clear.addEventListener("click", () => chrome.runtime.sendMessage({ type: "clearCache" }).then(() => flash("缓存已清除,刷新页面生效")));
-    const credit = h("small", "credit", "This product uses the TMDB API but is not endorsed or certified by TMDB. 数据来源:TMDB、NeoDB、OMDb、豆瓣。");
+    const clear = h("button", "clear", t("clear"));
+    clear.addEventListener("click", () => chrome.runtime.sendMessage({ type: "clearCache" }).then(() => flash(t("cleared"))));
+    const credit = h("small", "credit", t("credit"));
     panel.append(clear, msg, credit);
     root.querySelector(".fab").addEventListener("click", () => (panel.hidden = !panel.hidden));
     document.documentElement.append(host);
     return panel;
   }
 
-  let panel;
+  let panel, builtUi;
   const togglePanel = () => {
     panel ||= buildPanel();
     panel.hidden = !panel.hidden;
@@ -377,12 +425,18 @@
   chrome.storage.onChanged.addListener((_c, area) => {
     if (area !== "sync") return;
     loadSettings().then(() => {
+      if (panel && builtUi !== uiLang()) {
+        const open = !panel.hidden;
+        document.getElementById("cvr-settings")?.remove();
+        panel = buildPanel();
+        panel.hidden = !open;
+      }
       for (const v of views.values()) if (v.res && v.holder.isConnected) render(v);
       scan();
     });
   });
 
-  let t;
-  new MutationObserver(() => { clearTimeout(t); t = setTimeout(scan, 300); })
+  let timer;
+  new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(scan, 300); })
     .observe(document.body, { childList: true, subtree: true });
 })();
