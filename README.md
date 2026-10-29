@@ -11,6 +11,7 @@ A Chrome extension (Manifest V3) that adds ratings, localized titles, synopses a
 - **Synopsis**: filled in when Cineville has none; with translation on, replaced by the target-language synopsis
 - **Short reviews** on detail pages, mixed from Douban, NeoDB and TMDB, in a Douban-like layout (long reviews fold, with "Show more")
 - **Review translation**: foreign-language reviews can be translated with Chrome's built-in on-device Translator (automatic when Douban reviews are unavailable)
+- **Mobile-friendly**: touch-sized controls, a bottom-sheet settings panel, and tap-to-reveal hints instead of hover tooltips (works on Firefox for Android)
 - **In-page settings**: click the ⚙ button at the bottom right of any Cineville page (or the toolbar icon). The interface language follows your browser and can be changed there
 
 ## Install

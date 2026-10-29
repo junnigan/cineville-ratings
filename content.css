@@ -27,3 +27,15 @@ a.cvr-chip:hover{filter:brightness(1.1)}
 .cvr-tr{order:8}.cvr-vote{order:9}
 .cvr-clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .cvr-cmt>.cvr-tr{display:inline-block;margin:2px 0 0;order:0}
+.cvr-tap{cursor:help}
+.cvr-hint{flex-basis:100%;font-size:12px;line-height:1.4;opacity:.85}.cvr-hint a{color:inherit}
+@media (max-width:600px){
+  .cvr-badge{gap:6px 8px}
+  .cvr-chip{padding:5px 12px;font-size:14px}
+  .cvr-title{font-size:15px}
+  .cvr-extra{margin-top:20px}
+  .cvr-sec h3{font-size:18px}
+  .cvr-head{gap:4px 8px;font-size:14px}
+  .cvr-cmt p{font-size:15px}
+  .cvr-tr{font-size:14px;padding:4px 0}
+}

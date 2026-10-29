@@ -92,14 +92,28 @@
 
   // ---- 评分标签 ----
   function chip(cls, label, d) {
-    const e = h(d?.url ? "a" : "span", `cvr-chip ${cls}`);
-    if (d?.url) Object.assign(e, { href: d.url, target: "_blank", rel: "noopener" });
+    const hint = d?.blocked ? t("blocked") : d?.error === "nokey" ? t("nokey") : d?.error || null;
+    // 有提示的标签做成可点击(手机上没有悬停),点一下展开说明,说明里再给原链接
+    const e = h(d?.url && !hint ? "a" : "span", `cvr-chip ${cls}`);
+    if (d?.url && !hint) Object.assign(e, { href: d.url, target: "_blank", rel: "noopener" });
     e.append(h("i", null, label), h("b", null, d?.rating ? d.rating.toFixed(1) : "–"));
     if (d?.count) e.title = `${d.count.toLocaleString()} ratings`;
-    else if (d?.blocked) e.title = t("blocked");
-    else if (d?.error === "nokey") e.title = t("nokey");
-    else if (d?.error) e.title = d.error;
-    else if (d?.url && !d.rating) e.title = t("noRating");
+    else if (d?.url && !d.rating && !hint) e.title = t("noRating");
+    if (hint) {
+      e.title = hint;
+      e.classList.add("cvr-tap");
+      e.addEventListener("click", () => {
+        const next = e.nextElementSibling;
+        if (next?.classList.contains("cvr-hint")) return next.remove();
+        const note = h("div", "cvr-hint", hint);
+        if (d.url) {
+          const a = h("a", null, " ↗");
+          Object.assign(a, { href: d.url, target: "_blank", rel: "noopener" });
+          note.append(a);
+        }
+        e.after(note);
+      });
+    }
     return e;
   }
 
@@ -362,14 +376,16 @@
     const style = h("style");
     style.textContent = `
       *{box-sizing:border-box}
-      .fab{position:fixed;right:16px;bottom:16px;width:40px;height:40px;border:0;border-radius:50%;background:#101a3d;color:#fff;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);z-index:2147483000}
-      .panel{position:fixed;right:16px;bottom:64px;width:320px;max-height:70vh;overflow:auto;padding:14px 16px;background:#fff;color:#1a1a1a;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.28);font:14px/1.5 var(--fonts-averta,system-ui,sans-serif);z-index:2147483000;text-align:left}
+      .fab{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));width:44px;height:44px;border:0;border-radius:50%;background:#101a3d;color:#fff;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);z-index:2147483000}
+      .panel{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:calc(max(16px,env(safe-area-inset-bottom)) + 52px);width:320px;max-width:calc(100vw - 24px);max-height:70vh;overflow:auto;padding:14px 16px;background:#fff;color:#1a1a1a;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.28);font:14px/1.5 var(--fonts-averta,system-ui,sans-serif);z-index:2147483000;text-align:left}
       .panel[hidden]{display:none}
       h4{margin:14px 0 4px;font-size:12px;color:#777;font-weight:600}h4:first-child{margin-top:0}
       label{display:flex;gap:8px;align-items:flex-start;margin:4px 0}
       .col{display:block}select,input[type=text]{width:100%;margin-top:3px;padding:4px;font:inherit}
       a.getkey{display:inline-block;margin-top:4px;padding:3px 10px;border:1px solid #101a3d;border-radius:999px;color:#101a3d;font-size:12px;text-decoration:none;align-self:flex-start}a.getkey:hover{background:#101a3d;color:#fff}
       button.clear{margin-top:12px;padding:4px 10px;font:inherit}
+      input[type=checkbox]{width:18px;height:18px;flex:none;margin:2px 0 0}
+      @media (max-width:600px){.panel{left:12px;right:12px;width:auto;max-height:75vh;max-height:75dvh;font-size:15px}select,input[type=text]{font-size:16px;padding:8px}label{margin:9px 0}button.clear,a.getkey{padding:8px 14px;font-size:14px}}
       .credit{display:block;margin-top:10px;color:#888;font-size:11px;line-height:1.4}.msg{color:#2e963d;font-size:12px;min-height:1em;margin-top:6px}
     `;
     const fab = Object.assign(h("button", "fab", "⚙"), { title: t("fabTitle") });
